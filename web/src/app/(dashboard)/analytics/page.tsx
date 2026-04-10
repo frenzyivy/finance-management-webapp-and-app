@@ -1,6 +1,8 @@
 "use client";
 
+import { useState } from "react";
 import { addMonths, subMonths, format } from "date-fns";
+import Link from "next/link";
 import {
   BarChart3,
   ChevronLeft,
@@ -13,6 +15,8 @@ import {
   Calendar,
   Target,
   AlertTriangle,
+  FileDown,
+  CalendarRange,
 } from "lucide-react";
 
 import { useAnalytics } from "@/hooks/use-analytics";
@@ -26,10 +30,17 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 import { ExpensePieChart } from "@/components/charts/expense-pie-chart";
 import { MonthlyTrendChart } from "@/components/charts/monthly-trend-chart";
 import { DailySpendingChart } from "@/components/charts/daily-spending-chart";
+import { MonthlyReport } from "@/components/monthly-report";
 
 function SkeletonCard() {
   return (
@@ -54,6 +65,8 @@ function SkeletonChart({ height = "h-[300px]" }: { height?: string }) {
 }
 
 export default function AnalyticsPage() {
+  const [reportOpen, setReportOpen] = useState(false);
+
   const {
     totalIncome,
     totalExpenses,
@@ -117,7 +130,7 @@ export default function AnalyticsPage() {
           <h2 className="text-2xl font-bold tracking-tight">Analytics</h2>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button variant="outline" size="icon" onClick={goToPreviousMonth}>
             <ChevronLeft className="h-4 w-4" />
           </Button>
@@ -128,6 +141,17 @@ export default function AnalyticsPage() {
           <Button variant="outline" size="icon" onClick={goToNextMonth}>
             <ChevronRight className="h-4 w-4" />
           </Button>
+
+          <Button variant="outline" onClick={() => setReportOpen(true)}>
+            <FileDown className="mr-1.5 h-4 w-4" />
+            Download Report
+          </Button>
+          <Link href="/analytics/year-review">
+            <Button variant="outline">
+              <CalendarRange className="mr-1.5 h-4 w-4" />
+              Year in Review
+            </Button>
+          </Link>
         </div>
       </div>
 
@@ -378,6 +402,18 @@ export default function AnalyticsPage() {
           </CardHeader>
         </Card>
       </div>
+
+      {/* Monthly Report Dialog */}
+      <Dialog open={reportOpen} onOpenChange={setReportOpen}>
+        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              Monthly Report — {format(selectedMonth, "MMMM yyyy")}
+            </DialogTitle>
+          </DialogHeader>
+          <MonthlyReport month={selectedMonth} />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { Menu, Bell, Settings, LogOut } from "lucide-react";
+import { Menu, Bell, Moon, Sun, Settings, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -12,6 +12,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useUser } from "@/hooks/use-user";
+import { useTheme } from "@/hooks/use-theme";
 import { createClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
 
@@ -22,6 +23,7 @@ interface HeaderProps {
 export function Header({ onMenuClick }: HeaderProps) {
   const router = useRouter();
   const { user } = useUser();
+  const { theme, toggleTheme } = useTheme();
 
   const userName =
     user?.user_metadata?.name || user?.email?.split("@")[0] || "User";
@@ -63,6 +65,15 @@ export function Header({ onMenuClick }: HeaderProps) {
       <div className="flex items-center gap-2">
         <Button variant="ghost" size="icon" className="relative">
           <Bell className="h-5 w-5 text-muted-foreground" />
+        </Button>
+
+        <Button variant="ghost" size="icon" onClick={toggleTheme}>
+          {theme === "light" ? (
+            <Moon className="h-5 w-5 text-muted-foreground" />
+          ) : (
+            <Sun className="h-5 w-5 text-muted-foreground" />
+          )}
+          <span className="sr-only">Toggle theme</span>
         </Button>
 
         <DropdownMenu>

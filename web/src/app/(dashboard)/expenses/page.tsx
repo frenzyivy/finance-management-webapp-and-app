@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   Plus,
   Pencil,
@@ -10,6 +10,8 @@ import {
   Hash,
   TrendingUp,
   ReceiptText,
+  AlertTriangle,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -21,7 +23,8 @@ import {
   EXPENSE_CATEGORIES,
   PAYMENT_METHODS,
 } from "@/lib/constants/categories";
-import type { ExpenseEntry, ExpenseCategory } from "@/types/database";
+import { createClient } from "@/lib/supabase/client";
+import type { ExpenseEntry, ExpenseCategory, BudgetLimit } from "@/types/database";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -100,6 +103,87 @@ export default function ExpensesPage() {
   const [categoryFilter, setCategoryFilter] = useState<
     ExpenseCategory | "all"
   >("all");
+
+  // Budget limits state
+  const [budgetLimits, setBudgetLimits] = useState<BudgetLimit[]>([]);
+  const [dismissedAlerts, setDismissedAlerts] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    async function fetchBudgetLimits() {
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from("budget_limits")
+        .select("*");
+      if (!error && data) setBudgetLimits(data);
+    }
+    fetchBudgetLimits();
+  }, []);
+
+  // Compute budget alerts for current month
+  const budgetAlerts = useMemo(() => {
+    if (budgetLimits.length === 0 || entries.length === 0) return [];
+
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
+      .toISOString()
+      .split("T")[0];
+
+    // Sum spending per category for this month
+    const categoryTotals: Partial<Record<ExpenseCategory, number>> = {};
+    for (const entry of entries) {
+      if (entry.date >= monthStart) {
+        categoryTotals[entry.category] =
+          (categoryTotals[entry.category] ?? 0) + entry.amount;
+      }
+    }
+
+    const alerts: {
+      category: ExpenseCategory;
+      label: string;
+      spent: number;
+      limit: number;
+      percent: number;
+      level: "warning" | "danger";
+    }[] = [];
+
+    for (const bl of budgetLimits) {
+      const spent = categoryTotals[bl.category] ?? 0;
+      const percent = bl.monthly_limit > 0 ? (spent / bl.monthly_limit) * 100 : 0;
+
+      if (percent >= 100) {
+        const label =
+          EXPENSE_CATEGORIES.find((c) => c.value === bl.category)?.label ?? bl.category;
+        alerts.push({
+          category: bl.category,
+          label,
+          spent,
+          limit: bl.monthly_limit,
+          percent,
+          level: "danger",
+        });
+      } else if (percent >= 80) {
+        const label =
+          EXPENSE_CATEGORIES.find((c) => c.value === bl.category)?.label ?? bl.category;
+        alerts.push({
+          category: bl.category,
+          label,
+          spent,
+          limit: bl.monthly_limit,
+          percent,
+          level: "warning",
+        });
+      }
+    }
+
+    // Sort: danger first, then warning
+    return alerts.sort((a, b) =>
+      a.level === b.level ? 0 : a.level === "danger" ? -1 : 1
+    );
+  }, [entries, budgetLimits]);
+
+  const dismissAlert = (category: string) => {
+    setDismissedAlerts((prev) => new Set(prev).add(category));
+  };
 
   // Filtered entries
   const filteredEntries =
@@ -215,6 +299,50 @@ export default function ExpensesPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Budget Alerts */}
+      {budgetAlerts.filter((a) => !dismissedAlerts.has(a.category)).length > 0 && (
+        <div className="space-y-2">
+          {budgetAlerts
+            .filter((a) => !dismissedAlerts.has(a.category))
+            .map((alert) => (
+              <div
+                key={alert.category}
+                className={`flex items-center justify-between gap-3 rounded-lg border px-4 py-3 ${
+                  alert.level === "danger"
+                    ? "border-red-200 bg-red-50 text-red-800 dark:border-red-800 dark:bg-red-950/50 dark:text-red-300"
+                    : "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-950/50 dark:text-amber-300"
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <AlertTriangle
+                    className={`size-5 shrink-0 ${
+                      alert.level === "danger"
+                        ? "text-red-500 dark:text-red-400"
+                        : "text-amber-500 dark:text-amber-400"
+                    }`}
+                  />
+                  <p className="text-sm font-medium">
+                    {alert.level === "danger"
+                      ? `You've exceeded your ${alert.label} budget by ${formatCurrency(alert.spent - alert.limit)} (${formatCurrency(alert.spent)} of ${formatCurrency(alert.limit)})`
+                      : `You've spent ${Math.round(alert.percent)}% of your ${alert.label} budget (${formatCurrency(alert.spent)} of ${formatCurrency(alert.limit)})`}
+                  </p>
+                </div>
+                <button
+                  onClick={() => dismissAlert(alert.category)}
+                  className={`shrink-0 rounded p-1 transition-colors ${
+                    alert.level === "danger"
+                      ? "hover:bg-red-100 dark:hover:bg-red-900/50"
+                      : "hover:bg-amber-100 dark:hover:bg-amber-900/50"
+                  }`}
+                >
+                  <X className="size-4" />
+                  <span className="sr-only">Dismiss</span>
+                </button>
+              </div>
+            ))}
+        </div>
+      )}
 
       {/* Category Filter */}
       <div className="flex flex-wrap gap-2">
