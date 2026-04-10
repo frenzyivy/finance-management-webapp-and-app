@@ -4,6 +4,7 @@ import { DashboardScreen } from "../screens/DashboardScreen";
 import { IncomeScreen } from "../screens/IncomeScreen";
 import { ExpensesScreen } from "../screens/ExpensesScreen";
 import { GoalsScreen } from "../screens/GoalsScreen";
+import { DebtsScreen } from "../screens/DebtsScreen";
 import { SettingsScreen } from "../screens/SettingsScreen";
 import { Text } from "react-native";
 
@@ -51,6 +52,15 @@ export function MainTabs() {
         options={{
           tabBarIcon: ({ color }) => (
             <Text style={{ color, fontSize: 20 }}>🐷</Text>
+          ),
+        }}
+      />
+      <Tab.Screen
+        name="Debts"
+        component={DebtsScreen}
+        options={{
+          tabBarIcon: ({ color }) => (
+            <Text style={{ color, fontSize: 20 }}>💳</Text>
           ),
         }}
       />
