@@ -1,11 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { PiggyBank, X } from "lucide-react";
+import { usePathname, useRouter } from "next/navigation";
+import { PiggyBank, X, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { NAV_ITEMS } from "@/lib/constants/navigation";
 import { cn } from "@/lib/utils";
+import { useUser } from "@/hooks/use-user";
+import { createClient } from "@/lib/supabase/client";
+import { toast } from "sonner";
 
 interface SidebarProps {
   open: boolean;
@@ -14,6 +17,23 @@ interface SidebarProps {
 
 export function Sidebar({ open, onClose }: SidebarProps) {
   const pathname = usePathname();
+  const router = useRouter();
+  const { user } = useUser();
+
+  const userName = user?.user_metadata?.name || user?.email?.split("@")[0] || "User";
+  const userEmail = user?.email || "user@email.com";
+  const userInitial = userName.charAt(0).toUpperCase();
+
+  async function handleLogout() {
+    const supabase = createClient();
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      toast.error("Failed to log out. Please try again.");
+      return;
+    }
+    router.push("/login");
+    router.refresh();
+  }
 
   return (
     <>
@@ -63,28 +83,26 @@ export function Sidebar({ open, onClose }: SidebarProps) {
             const Icon = item.icon;
 
             return (
-              <Button
+              <Link
                 key={item.href}
-                variant="ghost"
-                asChild
+                href={item.href}
+                onClick={onClose}
                 className={cn(
-                  "w-full justify-start gap-3 text-sm font-medium",
+                  "flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-muted",
                   isActive &&
                     "bg-teal-50 text-teal-700 hover:bg-teal-100 hover:text-teal-800 dark:bg-teal-950 dark:text-teal-300 dark:hover:bg-teal-900"
                 )}
               >
-                <Link href={item.href} onClick={onClose}>
-                  <Icon
-                    className={cn(
-                      "h-5 w-5",
-                      isActive
-                        ? "text-teal-600 dark:text-teal-400"
-                        : "text-muted-foreground"
-                    )}
-                  />
-                  {item.label}
-                </Link>
-              </Button>
+                <Icon
+                  className={cn(
+                    "h-5 w-5",
+                    isActive
+                      ? "text-teal-600 dark:text-teal-400"
+                      : "text-muted-foreground"
+                  )}
+                />
+                {item.label}
+              </Link>
             );
           })}
         </nav>
@@ -92,13 +110,22 @@ export function Sidebar({ open, onClose }: SidebarProps) {
         {/* Bottom user section */}
         <div className="border-t border-border p-4">
           <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-teal-100 text-sm font-semibold text-teal-700 dark:bg-teal-900 dark:text-teal-300">
-              K
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-teal-100 text-sm font-semibold text-teal-700 dark:bg-teal-900 dark:text-teal-300">
+              {userInitial}
             </div>
             <div className="flex-1 truncate">
-              <p className="text-sm font-medium leading-none">User</p>
-              <p className="text-xs text-muted-foreground">user@email.com</p>
+              <p className="text-sm font-medium leading-none truncate">{userName}</p>
+              <p className="text-xs text-muted-foreground truncate">{userEmail}</p>
             </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="shrink-0 text-muted-foreground hover:text-destructive"
+              onClick={handleLogout}
+              title="Log out"
+            >
+              <LogOut className="h-4 w-4" />
+            </Button>
           </div>
         </div>
       </aside>
