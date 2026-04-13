@@ -62,11 +62,14 @@ export function ContributionForm({
     setSubmitting(true);
     try {
       const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not authenticated");
 
       // Insert the contribution
       const { error: contribError } = await supabase
         .from("savings_contributions")
         .insert({
+          user_id: user.id,
           goal_id: goalId,
           amount: values.amount,
           date: values.date,

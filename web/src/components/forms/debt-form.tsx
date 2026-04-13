@@ -119,7 +119,11 @@ export function DebtForm({ debt, onSuccess, onCancel }: DebtFormProps) {
     setSubmitting(true);
     try {
       const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not authenticated");
+
       const payload = {
+        user_id: user.id,
         name: values.name,
         type: values.type,
         creditor_name: values.creditor_name,

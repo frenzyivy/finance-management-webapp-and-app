@@ -118,7 +118,11 @@ export function ExpenseForm({ entry, onSuccess, onCancel }: ExpenseFormProps) {
     setSubmitting(true);
     try {
       const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not authenticated");
+
       const payload = {
+        user_id: user.id,
         amount: values.amount,
         category: values.category,
         sub_category: values.sub_category || null,

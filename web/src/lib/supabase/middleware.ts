@@ -25,15 +25,28 @@ export async function updateSession(request: NextRequest) {
     }
   );
 
+  // If there's an auth code in the URL, exchange it for a session
+  const code = request.nextUrl.searchParams.get("code");
+  if (code) {
+    await supabase.auth.exchangeCodeForSession(code);
+    // Redirect to clean URL without code param
+    const url = request.nextUrl.clone();
+    url.searchParams.delete("code");
+    url.searchParams.delete("error");
+    url.searchParams.delete("error_code");
+    url.searchParams.delete("error_description");
+    return NextResponse.redirect(url);
+  }
+
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
-  if (
-    !user &&
-    !request.nextUrl.pathname.startsWith("/login") &&
-    !request.nextUrl.pathname.startsWith("/signup")
-  ) {
+  const pathname = request.nextUrl.pathname;
+  const isAuthPage = pathname === "/login" || pathname === "/signup" || pathname === "/callback";
+
+  // Not logged in + trying to access protected page → redirect to login
+  if (!user && !isAuthPage) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     return NextResponse.redirect(url);

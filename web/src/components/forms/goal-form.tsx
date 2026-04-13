@@ -106,7 +106,11 @@ export function GoalForm({ goal, onSuccess, onCancel }: GoalFormProps) {
     setSubmitting(true);
     try {
       const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not authenticated");
+
       const payload = {
+        user_id: user.id,
         name: values.name,
         target_amount: values.target_amount,
         priority: values.priority,

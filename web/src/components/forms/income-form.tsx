@@ -95,7 +95,11 @@ export function IncomeForm({ entry, onSuccess, onCancel }: IncomeFormProps) {
     setSubmitting(true);
     try {
       const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not authenticated");
+
       const payload = {
+        user_id: user.id,
         amount: values.amount,
         category: values.category,
         source_name: values.source_name,

@@ -38,11 +38,14 @@ export function useDebts() {
     notes?: string
   ) => {
     const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { error: new Error("Not authenticated") };
 
     // Insert payment
     const { error: paymentError } = await supabase
       .from("debt_payments")
       .insert({
+        user_id: user.id,
         debt_id: debtId,
         amount,
         date,
