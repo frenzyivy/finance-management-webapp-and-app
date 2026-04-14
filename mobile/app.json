@@ -1,7 +1,8 @@
 {
   "expo": {
-    "name": "mobile",
-    "slug": "mobile",
+    "name": "KomalFin",
+    "slug": "komalfin",
+    "scheme": "komalfin",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -25,10 +26,16 @@
       "permissions": [
         "android.permission.READ_SMS"
       ],
-      "package": "com.anonymous.mobile"
+      "package": "com.komalvsingh.komalfin"
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "a93bc4f4-86b4-4376-b57e-a4ddb02ee4b3"
+      }
+    },
+    "owner": "komalvsingh"
   }
 }
