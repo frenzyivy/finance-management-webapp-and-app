@@ -3,7 +3,13 @@ from functools import lru_cache
 import os
 from dotenv import load_dotenv
 
-load_dotenv(os.path.join(os.path.dirname(__file__), '..', '..', '.env'))
+_BACKEND_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+_ROOT_DIR = os.path.abspath(os.path.join(_BACKEND_DIR, '..'))
+
+for _env_path in (os.path.join(_BACKEND_DIR, '.env'), os.path.join(_ROOT_DIR, '.env')):
+    if os.path.exists(_env_path):
+        load_dotenv(_env_path)
+        break
 
 class Settings(BaseSettings):
     supabase_url: str = ""
@@ -17,9 +23,6 @@ class Settings(BaseSettings):
     @property
     def cors_origins_list(self) -> list[str]:
         return [origin.strip() for origin in self.cors_origins.split(",")]
-
-    class Config:
-        env_file = "../../.env"
 
 @lru_cache()
 def get_settings() -> Settings:
