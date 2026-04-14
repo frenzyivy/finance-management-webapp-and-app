@@ -8,16 +8,28 @@ import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 
 import { formatCurrency } from "@/lib/utils/currency";
+import { PAYMENT_METHODS } from "@/lib/constants/categories";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 const paymentFormSchema = z.object({
   amount: z.coerce
     .number({ error: "Amount must be a number" })
     .positive({ error: "Amount must be greater than 0" }),
   date: z.string().min(1, { error: "Date is required" }),
+  payment_method: z.enum(
+    ["bank_transfer", "upi", "credit_card", "debit_card", "cash", "wallet"],
+    { error: "Please select a payment method" }
+  ),
   notes: z.string().max(500).optional().or(z.literal("")),
 });
 
@@ -31,7 +43,8 @@ interface DebtPaymentFormProps {
     debtId: string,
     amount: number,
     date: string,
-    notes?: string
+    notes?: string,
+    paymentMethod?: string
   ) => Promise<{ error: unknown }>;
   onSuccess: () => void;
   onCancel: () => void;
@@ -50,6 +63,8 @@ export function DebtPaymentForm({
   const {
     register,
     handleSubmit,
+    watch,
+    setValue,
     formState: { errors },
   } = useForm<PaymentFormValues>({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -57,9 +72,12 @@ export function DebtPaymentForm({
     defaultValues: {
       amount: undefined as unknown as number,
       date: new Date().toISOString().split("T")[0],
+      payment_method: "bank_transfer",
       notes: "",
     },
   });
+
+  const selectedPaymentMethod = watch("payment_method");
 
   const onSubmit = async (values: PaymentFormValues) => {
     setSubmitting(true);
@@ -68,7 +86,8 @@ export function DebtPaymentForm({
         debtId,
         values.amount,
         values.date,
-        values.notes || undefined
+        values.notes || undefined,
+        values.payment_method
       );
       if (error) {
         const message =
@@ -122,6 +141,33 @@ export function DebtPaymentForm({
             <p className="text-xs text-destructive">{errors.date.message}</p>
           )}
         </div>
+      </div>
+
+      {/* Payment Method */}
+      <div className="grid gap-2">
+        <Label>Payment Method</Label>
+        <Select
+          value={selectedPaymentMethod ?? "bank_transfer"}
+          onValueChange={(val) =>
+            setValue("payment_method", val as PaymentFormValues["payment_method"], {
+              shouldValidate: true,
+            })
+          }
+        >
+          <SelectTrigger className="w-full">
+            <SelectValue placeholder="Select payment method" />
+          </SelectTrigger>
+          <SelectContent>
+            {PAYMENT_METHODS.map((pm) => (
+              <SelectItem key={pm.value} value={pm.value}>
+                {pm.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {errors.payment_method && (
+          <p className="text-xs text-destructive">{errors.payment_method.message}</p>
+        )}
       </div>
 
       {/* Notes */}

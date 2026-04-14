@@ -3,10 +3,12 @@
 import { useState, useEffect, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { IncomeEntry } from "@/types/database";
+import { useSyncStore } from "@/lib/stores/sync-store";
 
 export function useIncome() {
   const [entries, setEntries] = useState<IncomeEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const syncVersion = useSyncStore((s) => s.syncVersion);
 
   const fetchEntries = useCallback(async () => {
     setLoading(true);
@@ -21,7 +23,7 @@ export function useIncome() {
 
   useEffect(() => {
     fetchEntries();
-  }, [fetchEntries]);
+  }, [fetchEntries, syncVersion]);
 
   const deleteEntry = async (id: string) => {
     const supabase = createClient();

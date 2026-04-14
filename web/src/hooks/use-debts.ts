@@ -2,11 +2,13 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { createClient } from "@/lib/supabase/client";
-import type { Debt, DebtPayment } from "@/types/database";
+import type { Debt, DebtPayment, DebtAllocation } from "@/types/database";
+import { useSyncStore } from "@/lib/stores/sync-store";
 
 export function useDebts() {
   const [debts, setDebts] = useState<Debt[]>([]);
   const [loading, setLoading] = useState(true);
+  const syncVersion = useSyncStore((s) => s.syncVersion);
 
   const fetchDebts = useCallback(async () => {
     setLoading(true);
@@ -22,7 +24,7 @@ export function useDebts() {
 
   useEffect(() => {
     fetchDebts();
-  }, [fetchDebts]);
+  }, [fetchDebts, syncVersion]);
 
   const deleteDebt = async (id: string) => {
     const supabase = createClient();
@@ -35,45 +37,24 @@ export function useDebts() {
     debtId: string,
     amount: number,
     date: string,
-    notes?: string
+    notes?: string,
+    paymentMethod?: string
   ) => {
     const supabase = createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return { error: new Error("Not authenticated") };
 
-    // Insert payment
-    const { error: paymentError } = await supabase
-      .from("debt_payments")
-      .insert({
-        user_id: user.id,
-        debt_id: debtId,
-        amount,
-        date,
-        notes: notes || null,
-      });
-    if (paymentError) return { error: paymentError };
+    // Use RPC to atomically create payment + auto-generate expense
+    const { error } = await supabase.rpc("log_debt_payment_with_expense", {
+      p_debt_id: debtId,
+      p_user_id: user.id,
+      p_amount: amount,
+      p_date: date,
+      p_notes: notes || null,
+      p_payment_method: paymentMethod || "bank_transfer",
+    });
 
-    // Find current debt
-    const debt = debts.find((d) => d.id === debtId);
-    if (!debt) return { error: new Error("Debt not found") };
-
-    const newBalance = Math.max(0, debt.outstanding_balance - amount);
-    const newStatus = newBalance <= 0 ? "paid_off" : debt.status;
-    const newRemainingEmis =
-      debt.emi_amount && debt.remaining_emis !== null
-        ? Math.max(0, debt.remaining_emis - 1)
-        : debt.remaining_emis;
-
-    const { error: updateError } = await supabase
-      .from("debts")
-      .update({
-        outstanding_balance: newBalance,
-        status: newStatus,
-        remaining_emis: newRemainingEmis,
-      })
-      .eq("id", debtId);
-
-    if (updateError) return { error: updateError };
+    if (error) return { error };
 
     await fetchDebts();
     return { error: null };
@@ -83,6 +64,17 @@ export function useDebts() {
     const supabase = createClient();
     const { data, error } = await supabase
       .from("debt_payments")
+      .select("*")
+      .eq("debt_id", debtId)
+      .order("date", { ascending: false });
+    if (error || !data) return [];
+    return data;
+  };
+
+  const fetchAllocations = async (debtId: string): Promise<DebtAllocation[]> => {
+    const supabase = createClient();
+    const { data, error } = await supabase
+      .from("debt_allocations")
       .select("*")
       .eq("debt_id", debtId)
       .order("date", { ascending: false });
@@ -122,6 +114,8 @@ export function useDebts() {
     deleteDebt,
     addPayment,
     fetchPayments,
+    fetchAllocations,
+    activeDebtsList,
     totalDebt,
     activeDebts,
     totalMonthlyEMI,

@@ -37,7 +37,7 @@ def seed_income(client, user_id: str):
             "user_id": user_id,
             "amount": 15000.00,
             "category": "freelance",
-            "source_name": "Alainza Bizz",
+            "source_name": "Allianza Biz",
             "date": str(date.today() - timedelta(days=5)),
             "payment_method": "upi",
             "is_recurring": False,

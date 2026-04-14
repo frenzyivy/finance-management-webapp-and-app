@@ -1,18 +1,22 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
-import { Loader2 } from "lucide-react";
+import { Loader2, AlertCircle } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/client";
+import { formatCurrency } from "@/lib/utils/currency";
 import {
   EXPENSE_CATEGORIES,
   PAYMENT_METHODS,
+  FUNDING_SOURCES,
+  BUSINESS_EXPENSE_CATEGORIES,
 } from "@/lib/constants/categories";
-import type { ExpenseEntry } from "@/types/database";
+import type { ExpenseEntry, Debt } from "@/types/database";
+import type { BusinessClient } from "@/types/business";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -45,6 +49,7 @@ const expenseFormSchema = z
         "subscriptions",
         "family_personal",
         "miscellaneous",
+        "debt_repayment",
       ],
       { error: "Please select a category" }
     ),
@@ -55,12 +60,34 @@ const expenseFormSchema = z
       ["bank_transfer", "upi", "credit_card", "debit_card", "cash", "wallet"],
       { error: "Please select a payment method" }
     ),
+    funding_source: z.enum(["own_funds", "debt_funded", "debt_repayment"]),
+    linked_debt_id: z.string().nullable(),
     is_emi: z.boolean(),
     is_recurring: z.boolean(),
     recurrence_frequency: z
       .enum(["weekly", "monthly", "quarterly", "yearly"])
       .nullable(),
     notes: z.string().max(500).nullable(),
+    is_business_investment: z.boolean(),
+    biz_category: z
+      .enum([
+        "saas_tools",
+        "marketing_ads",
+        "contractor_freelancer",
+        "hardware_equipment",
+        "learning_courses",
+        "travel_meetings",
+        "communication",
+        "domain_hosting",
+        "office_supplies",
+        "taxes_compliance",
+        "miscellaneous",
+      ])
+      .nullable(),
+    biz_vendor_name: z.string().max(100).nullable(),
+    biz_client_id: z.string().nullable(),
+    biz_subscription_id: z.string().nullable(),
+    biz_reason: z.string().max(200).nullable(),
   })
   .refine(
     (data) => {
@@ -71,19 +98,83 @@ const expenseFormSchema = z
       message: "Recurrence frequency is required for recurring expenses",
       path: ["recurrence_frequency"],
     }
+  )
+  .refine(
+    (data) => {
+      if (data.funding_source !== "own_funds" && !data.linked_debt_id) return false;
+      return true;
+    },
+    {
+      message: "Please select a debt",
+      path: ["linked_debt_id"],
+    }
+  )
+  .refine(
+    (data) => {
+      if (data.is_business_investment && !data.biz_category) return false;
+      return true;
+    },
+    {
+      message: "Please pick a business category",
+      path: ["biz_category"],
+    }
+  )
+  .refine(
+    (data) => {
+      if (data.is_business_investment && (!data.biz_vendor_name || data.biz_vendor_name.trim().length === 0)) return false;
+      return true;
+    },
+    {
+      message: "Vendor name is required for business expenses",
+      path: ["biz_vendor_name"],
+    }
   );
 
 type ExpenseFormValues = z.infer<typeof expenseFormSchema>;
 
 interface ExpenseFormProps {
   entry?: ExpenseEntry;
+  activeDebts?: Debt[];
   onSuccess: () => void;
   onCancel: () => void;
 }
 
-export function ExpenseForm({ entry, onSuccess, onCancel }: ExpenseFormProps) {
+export function ExpenseForm({ entry, activeDebts: activeDebtsProp, onSuccess, onCancel }: ExpenseFormProps) {
   const [submitting, setSubmitting] = useState(false);
+  const [activeDebts, setActiveDebts] = useState<Debt[]>(activeDebtsProp ?? []);
+  const [businessClients, setBusinessClients] = useState<BusinessClient[]>([]);
+  const [matchedSubscription, setMatchedSubscription] = useState<{ id: string; name: string } | null>(null);
   const isEditing = !!entry;
+  const wasBusinessOnLoad = entry?.is_business_investment ?? false;
+
+  // Fetch active debts if not passed as prop
+  useEffect(() => {
+    if (activeDebtsProp) return;
+    async function fetchDebts() {
+      const supabase = createClient();
+      const { data } = await supabase
+        .from("debts")
+        .select("*")
+        .eq("status", "active")
+        .order("creditor_name");
+      if (data) setActiveDebts(data as Debt[]);
+    }
+    fetchDebts();
+  }, [activeDebtsProp]);
+
+  // Fetch active business clients (for optional link on mirrored expense)
+  useEffect(() => {
+    async function fetchClients() {
+      const supabase = createClient();
+      const { data } = await supabase
+        .from("business_clients")
+        .select("id, user_id, name, industry, country, contact_name, contact_email, contact_phone, engagement_type, monthly_value, start_date, status, notes, created_at, updated_at")
+        .eq("status", "active")
+        .order("name");
+      if (data) setBusinessClients(data as BusinessClient[]);
+    }
+    fetchClients();
+  }, []);
 
   const {
     register,
@@ -101,10 +192,18 @@ export function ExpenseForm({ entry, onSuccess, onCancel }: ExpenseFormProps) {
       payee_name: entry?.payee_name ?? "",
       date: entry?.date ?? new Date().toISOString().split("T")[0],
       payment_method: entry?.payment_method ?? undefined,
+      funding_source: (entry?.funding_source as ExpenseFormValues["funding_source"]) ?? "own_funds",
+      linked_debt_id: entry?.linked_debt_id ?? null,
       is_emi: entry?.is_emi ?? false,
       is_recurring: entry?.is_recurring ?? false,
       recurrence_frequency: entry?.recurrence_frequency ?? null,
       notes: entry?.notes ?? null,
+      is_business_investment: entry?.is_business_investment ?? false,
+      biz_category: null,
+      biz_vendor_name: entry?.payee_name ?? null,
+      biz_client_id: null,
+      biz_subscription_id: null,
+      biz_reason: null,
     },
   });
 
@@ -113,6 +212,64 @@ export function ExpenseForm({ entry, onSuccess, onCancel }: ExpenseFormProps) {
   const selectedCategory = watch("category");
   const selectedPaymentMethod = watch("payment_method");
   const selectedFrequency = watch("recurrence_frequency");
+  const fundingSource = watch("funding_source");
+  const linkedDebtId = watch("linked_debt_id");
+  const isBusinessInvestment = watch("is_business_investment");
+  const bizCategory = watch("biz_category");
+  const bizClientId = watch("biz_client_id");
+  const payeeName = watch("payee_name");
+
+  const selectedDebt = activeDebts.find((d) => d.id === linkedDebtId);
+
+  // Auto-match business subscription by payee name (only when business investment is checked)
+  useEffect(() => {
+    if (!isBusinessInvestment || !payeeName || payeeName.trim().length < 3) {
+      setMatchedSubscription(null);
+      setValue("biz_subscription_id", null);
+      return;
+    }
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user || cancelled) return;
+      const { data: matchId, error } = await supabase.rpc("match_business_subscription_by_name", {
+        p_user_id: user.id,
+        p_payee_name: payeeName,
+      });
+      if (error || cancelled || !matchId) {
+        setMatchedSubscription(null);
+        setValue("biz_subscription_id", null);
+        return;
+      }
+      const { data: sub } = await supabase
+        .from("business_subscriptions")
+        .select("id, name")
+        .eq("id", matchId)
+        .single();
+      if (cancelled) return;
+      if (sub) {
+        setMatchedSubscription({ id: sub.id, name: sub.name });
+        setValue("biz_subscription_id", sub.id);
+        // Default category to saas_tools on a subscription match (user can override)
+        if (!bizCategory) {
+          setValue("biz_category", "saas_tools");
+        }
+      }
+    }, 400);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isBusinessInvestment, payeeName]);
+
+  // Force business investment off when funding is debt-linked (out of scope)
+  useEffect(() => {
+    if (fundingSource !== "own_funds" && isBusinessInvestment) {
+      setValue("is_business_investment", false);
+    }
+  }, [fundingSource, isBusinessInvestment, setValue]);
 
   const onSubmit = async (values: ExpenseFormValues) => {
     setSubmitting(true);
@@ -121,35 +278,125 @@ export function ExpenseForm({ entry, onSuccess, onCancel }: ExpenseFormProps) {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Not authenticated");
 
-      const payload = {
-        user_id: user.id,
-        amount: values.amount,
-        category: values.category,
-        sub_category: values.sub_category || null,
-        payee_name: values.payee_name,
-        date: values.date,
-        payment_method: values.payment_method,
-        is_emi: values.is_emi,
-        is_recurring: values.is_recurring,
-        recurrence_frequency: values.is_recurring
-          ? values.recurrence_frequency
-          : null,
-        notes: values.notes || null,
+      const wantsMirror = values.is_business_investment && values.funding_source === "own_funds";
+
+      // Helper: run mirror (after entry exists)
+      const runMirror = async (personalExpenseId: string) => {
+        const { error: mirrorErr } = await supabase.rpc("mirror_expense_to_business", {
+          p_personal_expense_id: personalExpenseId,
+          p_biz_category: values.biz_category,
+          p_biz_vendor_name: (values.biz_vendor_name || values.payee_name).trim(),
+          p_biz_sub_category: values.sub_category || null,
+          p_biz_subscription_id: values.biz_subscription_id || null,
+          p_biz_client_id: values.biz_client_id || null,
+          p_reason: values.biz_reason || "Paid from personal for business",
+          p_notes: values.notes || null,
+        });
+        if (mirrorErr) throw mirrorErr;
+      };
+
+      const runUnmirror = async (personalExpenseId: string) => {
+        const { error: unmirrorErr } = await supabase.rpc("unmirror_expense_to_business", {
+          p_personal_expense_id: personalExpenseId,
+        });
+        if (unmirrorErr) throw unmirrorErr;
       };
 
       if (isEditing) {
+        // For editing, use direct update (keeping it simple — cascades are handled on delete)
+        const payload = {
+          amount: values.amount,
+          category: values.category,
+          sub_category: values.sub_category || null,
+          payee_name: values.payee_name,
+          date: values.date,
+          payment_method: values.payment_method,
+          funding_source: values.funding_source,
+          linked_debt_id: values.linked_debt_id || null,
+          is_emi: values.is_emi,
+          is_recurring: values.is_recurring,
+          recurrence_frequency: values.is_recurring
+            ? values.recurrence_frequency
+            : null,
+          notes: values.notes || null,
+        };
         const { error } = await supabase
           .from("expense_entries")
           .update(payload)
           .eq("id", entry.id);
         if (error) throw error;
-        toast.success("Expense entry updated successfully");
-      } else {
-        const { error } = await supabase
-          .from("expense_entries")
-          .insert(payload);
+
+        // Handle mirror state transitions on edit.
+        // Any of these cases requires tearing down an existing mirror first:
+        //   was=true  now=false  -> unmirror
+        //   was=true  now=true   -> unmirror then re-mirror (propagates changes)
+        //   was=false now=true   -> mirror
+        if (wasBusinessOnLoad) {
+          await runUnmirror(entry.id);
+        }
+        if (wantsMirror) {
+          await runMirror(entry.id);
+          toast.success("Expense updated & mirrored to business books");
+        } else {
+          toast.success("Expense entry updated successfully");
+        }
+      } else if (values.funding_source !== "own_funds" && values.linked_debt_id) {
+        // Use RPC for debt-linked expense creation (transactional)
+        const { error } = await supabase.rpc("create_expense_with_debt_link", {
+          p_user_id: user.id,
+          p_amount: values.amount,
+          p_category: values.category,
+          p_sub_category: values.sub_category || null,
+          p_payee_name: values.payee_name,
+          p_date: values.date,
+          p_payment_method: values.payment_method,
+          p_funding_source: values.funding_source,
+          p_linked_debt_id: values.linked_debt_id,
+          p_is_emi: values.is_emi,
+          p_is_recurring: values.is_recurring,
+          p_recurrence_frequency: values.is_recurring
+            ? values.recurrence_frequency
+            : null,
+          p_notes: values.notes || null,
+        });
         if (error) throw error;
-        toast.success("Expense entry added successfully");
+
+        if (values.funding_source === "debt_repayment") {
+          toast.success("Expense added & debt payment recorded automatically");
+        } else {
+          toast.success("Expense added & linked to debt");
+        }
+      } else {
+        // Regular expense — direct insert
+        const payload = {
+          user_id: user.id,
+          amount: values.amount,
+          category: values.category,
+          sub_category: values.sub_category || null,
+          payee_name: values.payee_name,
+          date: values.date,
+          payment_method: values.payment_method,
+          funding_source: values.funding_source,
+          is_emi: values.is_emi,
+          is_recurring: values.is_recurring,
+          recurrence_frequency: values.is_recurring
+            ? values.recurrence_frequency
+            : null,
+          notes: values.notes || null,
+        };
+        const { data: inserted, error } = await supabase
+          .from("expense_entries")
+          .insert(payload)
+          .select("id")
+          .single();
+        if (error) throw error;
+
+        if (wantsMirror && inserted) {
+          await runMirror(inserted.id);
+          toast.success("Expense added & mirrored to business books");
+        } else {
+          toast.success("Expense entry added successfully");
+        }
       }
 
       onSuccess();
@@ -275,7 +522,189 @@ export function ExpenseForm({ entry, onSuccess, onCancel }: ExpenseFormProps) {
         )}
       </div>
 
-      {/* Row 5: Checkboxes */}
+      {/* Row 5: Funding Source */}
+      <div className="grid gap-2">
+        <Label>Funding Source</Label>
+        <div className="flex flex-wrap gap-3">
+          {FUNDING_SOURCES.map((fs) => (
+            <label key={fs.value} className="flex items-center gap-1.5 text-sm cursor-pointer">
+              <input
+                type="radio"
+                name="funding_source"
+                value={fs.value}
+                checked={fundingSource === fs.value}
+                onChange={() => {
+                  setValue("funding_source", fs.value as ExpenseFormValues["funding_source"], { shouldValidate: true });
+                  if (fs.value === "own_funds") {
+                    setValue("linked_debt_id", null);
+                  }
+                  if (fs.value === "debt_repayment") {
+                    setValue("category", "debt_repayment", { shouldValidate: true });
+                  }
+                }}
+                className="accent-primary"
+              />
+              {fs.label}
+            </label>
+          ))}
+        </div>
+      </div>
+
+      {/* Conditional: Debt Selector */}
+      {fundingSource !== "own_funds" && (
+        <div className="grid gap-2">
+          <Label>Select Debt</Label>
+          {activeDebts.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No active debts found.</p>
+          ) : (
+            <Select
+              value={linkedDebtId ?? ""}
+              onValueChange={(val) =>
+                setValue("linked_debt_id", val, { shouldValidate: true })
+              }
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Select a debt" />
+              </SelectTrigger>
+              <SelectContent>
+                {activeDebts.map((debt) => {
+                  const unallocated = debt.original_amount - (debt.allocated_amount ?? 0);
+                  return (
+                    <SelectItem key={debt.id} value={debt.id}>
+                      {debt.creditor_name} — {debt.name}
+                      {fundingSource === "debt_funded" && ` (${formatCurrency(unallocated)} unallocated)`}
+                      {fundingSource === "debt_repayment" && ` (${formatCurrency(debt.outstanding_balance)} outstanding)`}
+                    </SelectItem>
+                  );
+                })}
+              </SelectContent>
+            </Select>
+          )}
+          {errors.linked_debt_id && (
+            <p className="text-xs text-destructive">{errors.linked_debt_id.message}</p>
+          )}
+          {selectedDebt && fundingSource === "debt_repayment" && selectedDebt.emi_amount && (
+            <p className="text-xs text-muted-foreground">
+              EMI amount: {formatCurrency(selectedDebt.emi_amount)}
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Business Investment block (own_funds only) */}
+      {fundingSource === "own_funds" && (
+        <div className="grid gap-3 rounded-lg border border-dashed border-primary/40 bg-primary/5 px-3 py-3">
+          <div className="flex items-center gap-2">
+            <input
+              id="is_business_investment"
+              type="checkbox"
+              className="size-4 rounded border-input accent-primary"
+              checked={isBusinessInvestment}
+              onChange={(e) => {
+                setValue("is_business_investment", e.target.checked, { shouldValidate: true });
+                if (!e.target.checked) {
+                  setValue("biz_category", null);
+                  setValue("biz_subscription_id", null);
+                  setValue("biz_client_id", null);
+                  setMatchedSubscription(null);
+                }
+              }}
+            />
+            <Label htmlFor="is_business_investment" className="font-medium">
+              Paid from my pocket for the business
+            </Label>
+          </div>
+
+          {isBusinessInvestment && (
+            <div className="grid gap-3 pl-6">
+              {matchedSubscription && (
+                <p className="text-xs text-primary">
+                  Matched to subscription: <strong>{matchedSubscription.name}</strong> — will link automatically
+                </p>
+              )}
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="grid gap-2">
+                  <Label>Business Category</Label>
+                  <Select
+                    value={bizCategory ?? ""}
+                    onValueChange={(val) =>
+                      setValue("biz_category", val as ExpenseFormValues["biz_category"], { shouldValidate: true })
+                    }
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Select business category" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {BUSINESS_EXPENSE_CATEGORIES.map((cat) => (
+                        <SelectItem key={cat.value} value={cat.value}>
+                          {cat.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {errors.biz_category && (
+                    <p className="text-xs text-destructive">{errors.biz_category.message}</p>
+                  )}
+                </div>
+
+                <div className="grid gap-2">
+                  <Label htmlFor="biz_vendor_name">Vendor Name</Label>
+                  <Input
+                    id="biz_vendor_name"
+                    placeholder="e.g. Claude.ai, AWS"
+                    {...register("biz_vendor_name")}
+                  />
+                  {errors.biz_vendor_name && (
+                    <p className="text-xs text-destructive">{errors.biz_vendor_name.message}</p>
+                  )}
+                </div>
+              </div>
+
+              {businessClients.length > 0 && (
+                <div className="grid gap-2">
+                  <Label>Link to Client (optional)</Label>
+                  <Select
+                    value={bizClientId ?? "__none__"}
+                    onValueChange={(val) => setValue("biz_client_id", val === "__none__" ? null : val)}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="No client link" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">No client link</SelectItem>
+                      {businessClients.map((c) => (
+                        <SelectItem key={c.id} value={c.id}>
+                          {c.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
+              <div className="grid gap-2">
+                <Label htmlFor="biz_reason">Reason (optional)</Label>
+                <Input
+                  id="biz_reason"
+                  placeholder="e.g. AI tooling for client work"
+                  {...register("biz_reason")}
+                />
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Auto-generated warning for editing */}
+      {isEditing && entry?.is_auto_generated && (
+        <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950/50 dark:text-amber-300">
+          <AlertCircle className="mt-0.5 size-4 shrink-0" />
+          <span>This expense was auto-generated from a debt. Editing it may desync linked records.</span>
+        </div>
+      )}
+
+      {/* Row 6: Checkboxes */}
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="flex items-center gap-2">
           <input

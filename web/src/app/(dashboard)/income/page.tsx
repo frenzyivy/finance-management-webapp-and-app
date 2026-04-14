@@ -192,9 +192,27 @@ export default function IncomePage() {
                     {entry.source_name}
                   </TableCell>
                   <TableCell>
-                    <Badge className="bg-teal-100 text-teal-800 dark:bg-teal-900/40 dark:text-teal-300">
-                      {getCategoryLabel(entry.category)}
-                    </Badge>
+                    <div className="flex items-center gap-1.5">
+                      <Badge className="bg-teal-100 text-teal-800 dark:bg-teal-900/40 dark:text-teal-300">
+                        {getCategoryLabel(entry.category)}
+                      </Badge>
+                      {entry.is_auto_generated && (
+                        <Badge
+                          variant="secondary"
+                          className="bg-gray-100 text-gray-500 dark:bg-gray-800/50 dark:text-gray-400 text-[10px]"
+                        >
+                          Auto
+                        </Badge>
+                      )}
+                      {entry.is_recurring && !entry.is_auto_generated && (
+                        <Badge
+                          variant="secondary"
+                          className="bg-blue-100 text-blue-600 dark:bg-blue-900/40 dark:text-blue-300 text-[10px]"
+                        >
+                          Recurring
+                        </Badge>
+                      )}
+                    </div>
                   </TableCell>
                   <TableCell className="text-right font-medium">
                     {formatCurrency(entry.amount)}

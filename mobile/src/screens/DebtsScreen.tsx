@@ -10,10 +10,16 @@ import {
   RefreshControl,
   TextInput,
   Modal,
+  ScrollView,
 } from "react-native";
 import { supabase } from "../lib/supabase";
+import { useSyncStore } from "../lib/sync-store";
 import { Debt, DebtType } from "../types/database";
 import { formatCurrency, formatDate } from "../lib/format";
+import { EXPENSE_CATEGORIES } from "../lib/constants";
+import { EMICalendar } from "../components/EMICalendar";
+import { PaymentReminders } from "../components/PaymentReminders";
+import { PickerModal } from "../components/PickerModal";
 
 const TYPE_COLORS: Record<DebtType, string> = {
   credit_card: "#f87171",
@@ -32,12 +38,22 @@ const TYPE_LABELS: Record<DebtType, string> = {
 };
 
 export function DebtsScreen({ navigation }: any) {
+  const syncVersion = useSyncStore((s) => s.syncVersion);
   const [debts, setDebts] = useState<Debt[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [paymentModalVisible, setPaymentModalVisible] = useState(false);
   const [selectedDebt, setSelectedDebt] = useState<Debt | null>(null);
   const [paymentAmount, setPaymentAmount] = useState("");
+
+  // Debt allocation state
+  const [allocationModalVisible, setAllocationModalVisible] = useState(false);
+  const [allocationDebt, setAllocationDebt] = useState<Debt | null>(null);
+  const [allocPurpose, setAllocPurpose] = useState("");
+  const [allocAmount, setAllocAmount] = useState("");
+  const [allocCategory, setAllocCategory] = useState("food_groceries");
+  const [showAllocCategoryPicker, setShowAllocCategoryPicker] = useState(false);
+  const [allocSaving, setAllocSaving] = useState(false);
 
   const fetchDebts = useCallback(async () => {
     try {
@@ -64,17 +80,22 @@ export function DebtsScreen({ navigation }: any) {
     fetchDebts();
     const unsubscribe = navigation.addListener("focus", fetchDebts);
     return unsubscribe;
-  }, [fetchDebts, navigation]);
+  }, [fetchDebts, navigation, syncVersion]);
 
   useEffect(() => {
     navigation.setOptions({
       headerRight: () => (
-        <TouchableOpacity
-          onPress={() => navigation.navigate("AddDebt")}
-          style={{ marginRight: 16 }}
-        >
-          <Text style={{ color: "#fff", fontSize: 16, fontWeight: "600" }}>+ New</Text>
-        </TouchableOpacity>
+        <View style={{ flexDirection: "row", gap: 12, marginRight: 16 }}>
+          <TouchableOpacity onPress={() => navigation.navigate("ScanBnplInvoice")}>
+            <Text style={{ color: "#fff", fontSize: 14, fontWeight: "500" }}>✨ Scan</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => navigation.navigate("CCStatementUpload", { creditCardId: "", cardName: "Credit Card" })}>
+            <Text style={{ color: "#fff", fontSize: 14, fontWeight: "500" }}>📄 CC</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => navigation.navigate("AddDebt")}>
+            <Text style={{ color: "#fff", fontSize: 16, fontWeight: "600" }}>+ New</Text>
+          </TouchableOpacity>
+        </View>
       ),
     });
   }, [navigation]);
@@ -85,7 +106,7 @@ export function DebtsScreen({ navigation }: any) {
   };
 
   const activeDebts = debts.filter((d) => d.status === "active");
-  const totalDebt = activeDebts.reduce((sum, d) => sum + d.current_balance, 0);
+  const totalDebt = activeDebts.reduce((sum, d) => sum + d.outstanding_balance, 0);
 
   const handleLogPayment = (debt: Debt) => {
     setSelectedDebt(debt);
@@ -116,9 +137,9 @@ export function DebtsScreen({ navigation }: any) {
 
       if (payError) throw payError;
 
-      const newBalance = Math.max(0, selectedDebt.current_balance - amount);
+      const newBalance = Math.max(0, selectedDebt.outstanding_balance - amount);
       const updates: any = {
-        current_balance: newBalance,
+        outstanding_balance: newBalance,
         updated_at: new Date().toISOString(),
       };
       if (newBalance <= 0) {
@@ -159,10 +180,69 @@ export function DebtsScreen({ navigation }: any) {
     ]);
   };
 
+  const handleAllocate = (debt: Debt) => {
+    setAllocationDebt(debt);
+    setAllocPurpose("");
+    setAllocAmount("");
+    setAllocCategory("food_groceries");
+    setAllocationModalVisible(true);
+  };
+
+  const confirmAllocation = async () => {
+    if (!allocationDebt) return;
+    const amount = parseFloat(allocAmount);
+    if (!amount || amount <= 0) {
+      Alert.alert("Invalid", "Please enter a valid amount");
+      return;
+    }
+    if (!allocPurpose.trim()) {
+      Alert.alert("Invalid", "Please enter a purpose");
+      return;
+    }
+
+    const existingAllocated = (allocationDebt as any).allocated_amount ?? 0;
+    const maxAllocatable = allocationDebt.original_amount - existingAllocated;
+    if (amount > maxAllocatable) {
+      Alert.alert("Invalid", `Amount exceeds available (${formatCurrency(maxAllocatable)})`);
+      return;
+    }
+
+    setAllocSaving(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const allocPayload = [{
+        amount,
+        category: allocCategory,
+        sub_category: null,
+        payee_name: `${allocationDebt.creditor_name} (debt)`,
+        date: new Date().toISOString().split("T")[0],
+        description: allocPurpose.trim(),
+        payment_method: "bank_transfer",
+      }];
+
+      const { error } = await supabase.rpc("create_debt_allocations", {
+        p_debt_id: allocationDebt.id,
+        p_user_id: user.id,
+        p_allocations: allocPayload,
+      });
+
+      if (error) throw error;
+
+      setAllocationModalVisible(false);
+      fetchDebts();
+    } catch (err: any) {
+      Alert.alert("Error", err.message || "Failed to save allocation");
+    } finally {
+      setAllocSaving(false);
+    }
+  };
+
   const renderDebt = ({ item }: { item: Debt }) => {
-    const paid = item.principal_amount - item.current_balance;
-    const progress = item.principal_amount > 0
-      ? Math.min((paid / item.principal_amount) * 100, 100)
+    const paid = item.original_amount - item.outstanding_balance;
+    const progress = item.original_amount > 0
+      ? Math.min((paid / item.original_amount) * 100, 100)
       : 0;
     const typeColor = TYPE_COLORS[item.type] || "#6b7280";
 
@@ -175,8 +255,8 @@ export function DebtsScreen({ navigation }: any) {
           </View>
         </View>
 
-        {item.lender && (
-          <Text style={styles.lenderText}>{item.lender}</Text>
+        {item.creditor_name && (
+          <Text style={styles.lenderText}>{item.creditor_name}</Text>
         )}
 
         <View style={styles.progressBarBg}>
@@ -184,17 +264,17 @@ export function DebtsScreen({ navigation }: any) {
         </View>
 
         <Text style={styles.progressText}>
-          Paid {formatCurrency(paid)} / {formatCurrency(item.principal_amount)} ({Math.round(progress)}%)
+          Paid {formatCurrency(paid)} / {formatCurrency(item.original_amount)} ({Math.round(progress)}%)
         </Text>
 
         <Text style={styles.balanceText}>
-          Outstanding: {formatCurrency(item.current_balance)}
+          Outstanding: {formatCurrency(item.outstanding_balance)}
         </Text>
 
-        {item.minimum_payment != null && item.minimum_payment > 0 && (
+        {item.emi_amount != null && item.emi_amount > 0 && (
           <Text style={styles.emiText}>
-            {formatCurrency(item.minimum_payment)}/month
-            {item.due_date ? ` | Due: ${formatDate(item.due_date)}` : ""}
+            {formatCurrency(item.emi_amount)}/month
+            {item.expected_payoff_date ? ` | Payoff: ${formatDate(item.expected_payoff_date)}` : ""}
           </Text>
         )}
 
@@ -210,6 +290,18 @@ export function DebtsScreen({ navigation }: any) {
             onPress={() => handleLogPayment(item)}
           >
             <Text style={styles.actionBtnText}>Log Payment</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.actionBtn, { backgroundColor: "#8b5cf6" }]}
+            onPress={() => handleAllocate(item)}
+          >
+            <Text style={styles.actionBtnText}>Allocate</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.actionBtn, { backgroundColor: "#3b82f6" }]}
+            onPress={() => navigation.navigate("AddDebt", { debt: item })}
+          >
+            <Text style={styles.actionBtnText}>Edit</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.actionBtn, { backgroundColor: "#f87171" }]}
@@ -250,6 +342,18 @@ export function DebtsScreen({ navigation }: any) {
         keyExtractor={(item) => item.id}
         renderItem={renderDebt}
         contentContainerStyle={debts.length === 0 ? styles.centered : styles.list}
+        ListHeaderComponent={debts.length > 0 ? (
+          <>
+            <PaymentReminders
+              debts={debts}
+              onLogPayment={(debtId) => {
+                const debt = debts.find((d) => d.id === debtId);
+                if (debt) handleLogPayment(debt);
+              }}
+            />
+            <EMICalendar debts={debts} />
+          </>
+        ) : null}
         ListEmptyComponent={
           <View style={styles.empty}>
             <Text style={styles.emptyIcon}>💳</Text>
@@ -300,6 +404,85 @@ export function DebtsScreen({ navigation }: any) {
           </View>
         </View>
       </Modal>
+
+      {/* Allocation Modal */}
+      <Modal visible={allocationModalVisible} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { maxHeight: "80%" }]}>
+            <ScrollView>
+              <Text style={styles.modalTitle}>Allocate: {allocationDebt?.name}</Text>
+
+              {allocationDebt && (
+                <View style={styles.allocSummary}>
+                  <Text style={styles.allocSummaryText}>
+                    {formatCurrency(allocationDebt.original_amount)} from {allocationDebt.creditor_name}
+                  </Text>
+                  <Text style={styles.allocSummaryHint}>
+                    {formatCurrency(allocationDebt.original_amount - ((allocationDebt as any).allocated_amount ?? 0))} available to allocate
+                  </Text>
+                </View>
+              )}
+
+              <Text style={styles.allocLabel}>Purpose *</Text>
+              <TextInput
+                style={styles.modalInput}
+                placeholder="e.g. Room deposit, Phone purchase"
+                value={allocPurpose}
+                onChangeText={setAllocPurpose}
+              />
+
+              <Text style={styles.allocLabel}>Amount *</Text>
+              <TextInput
+                style={styles.modalInput}
+                placeholder="0"
+                keyboardType="numeric"
+                value={allocAmount}
+                onChangeText={setAllocAmount}
+              />
+
+              <Text style={styles.allocLabel}>Category</Text>
+              <TouchableOpacity
+                style={styles.allocPickerBtn}
+                onPress={() => setShowAllocCategoryPicker(true)}
+              >
+                <Text style={styles.allocPickerText}>
+                  {EXPENSE_CATEGORIES.find((c) => c.value === allocCategory)?.label ?? allocCategory}
+                </Text>
+                <Text style={{ fontSize: 12, color: "#6b7280" }}>▼</Text>
+              </TouchableOpacity>
+
+              <View style={[styles.modalActions, { marginTop: 16 }]}>
+                <TouchableOpacity
+                  style={[styles.modalBtn, { backgroundColor: "#6b7280" }]}
+                  onPress={() => setAllocationModalVisible(false)}
+                >
+                  <Text style={styles.modalBtnText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.modalBtn, { backgroundColor: "#8b5cf6", opacity: allocSaving ? 0.6 : 1 }]}
+                  onPress={confirmAllocation}
+                  disabled={allocSaving}
+                >
+                  {allocSaving ? (
+                    <ActivityIndicator color="#fff" size="small" />
+                  ) : (
+                    <Text style={styles.modalBtnText}>Save</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      <PickerModal
+        visible={showAllocCategoryPicker}
+        onClose={() => setShowAllocCategoryPicker(false)}
+        options={EXPENSE_CATEGORIES.filter((c) => c.value !== "debt_repayment")}
+        selectedValue={allocCategory}
+        onSelect={(val) => setAllocCategory(val)}
+        title="Select Category"
+      />
     </View>
   );
 }
@@ -408,4 +591,24 @@ const styles = StyleSheet.create({
   modalActions: { flexDirection: "row", justifyContent: "flex-end", gap: 8 },
   modalBtn: { paddingHorizontal: 20, paddingVertical: 10, borderRadius: 8 },
   modalBtnText: { color: "#fff", fontWeight: "600" },
+  allocSummary: {
+    backgroundColor: "#f3f4f6",
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 12,
+  },
+  allocSummaryText: { fontSize: 14, fontWeight: "600", color: "#1f2937" },
+  allocSummaryHint: { fontSize: 12, color: "#6b7280", marginTop: 2 },
+  allocLabel: { fontSize: 14, fontWeight: "600", color: "#1f2937", marginBottom: 6 },
+  allocPickerBtn: {
+    borderWidth: 1,
+    borderColor: "#d1d5db",
+    borderRadius: 8,
+    padding: 12,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  allocPickerText: { fontSize: 16, color: "#1f2937" },
 });

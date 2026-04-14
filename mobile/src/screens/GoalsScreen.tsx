@@ -13,6 +13,7 @@ import {
   Platform,
 } from "react-native";
 import { supabase } from "../lib/supabase";
+import { useSyncStore } from "../lib/sync-store";
 import { SavingsGoal } from "../types/database";
 import { formatCurrency, formatDate } from "../lib/format";
 
@@ -29,6 +30,7 @@ function getGoalColor(index: number): string {
 }
 
 export function GoalsScreen({ navigation }: any) {
+  const syncVersion = useSyncStore((s) => s.syncVersion);
   const [goals, setGoals] = useState<SavingsGoal[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -61,7 +63,7 @@ export function GoalsScreen({ navigation }: any) {
     fetchGoals();
     const unsubscribe = navigation.addListener("focus", fetchGoals);
     return unsubscribe;
-  }, [fetchGoals, navigation]);
+  }, [fetchGoals, navigation, syncVersion]);
 
   useEffect(() => {
     navigation.setOptions({
@@ -81,7 +83,7 @@ export function GoalsScreen({ navigation }: any) {
     fetchGoals();
   };
 
-  const totalSaved = goals.reduce((sum, g) => sum + g.current_amount, 0);
+  const totalSaved = goals.reduce((sum, g) => sum + g.current_balance, 0);
 
   const handleAddMoney = (goal: SavingsGoal) => {
     setSelectedGoal(goal);
@@ -112,8 +114,8 @@ export function GoalsScreen({ navigation }: any) {
 
       if (contribError) throw contribError;
 
-      const newBalance = selectedGoal.current_amount + amount;
-      const updates: any = { current_amount: newBalance, updated_at: new Date().toISOString() };
+      const newBalance = selectedGoal.current_balance + amount;
+      const updates: any = { current_balance: newBalance, updated_at: new Date().toISOString() };
       if (newBalance >= selectedGoal.target_amount) {
         updates.status = "completed";
       }
@@ -154,7 +156,7 @@ export function GoalsScreen({ navigation }: any) {
 
   const renderGoal = ({ item, index }: { item: SavingsGoal; index: number }) => {
     const progress = item.target_amount > 0
-      ? Math.min((item.current_amount / item.target_amount) * 100, 100)
+      ? Math.min((item.current_balance / item.target_amount) * 100, 100)
       : 0;
     const color = getGoalColor(index);
 
@@ -181,11 +183,11 @@ export function GoalsScreen({ navigation }: any) {
           </View>
 
           <Text style={styles.progressText}>
-            {formatCurrency(item.current_amount)} / {formatCurrency(item.target_amount)} ({Math.round(progress)}%)
+            {formatCurrency(item.current_balance)} / {formatCurrency(item.target_amount)} ({Math.round(progress)}%)
           </Text>
 
-          {item.deadline && (
-            <Text style={styles.dateText}>Target: {formatDate(item.deadline)}</Text>
+          {item.target_date && (
+            <Text style={styles.dateText}>Target: {formatDate(item.target_date)}</Text>
           )}
 
           <View style={styles.actionRow}>
@@ -194,6 +196,12 @@ export function GoalsScreen({ navigation }: any) {
               onPress={() => handleAddMoney(item)}
             >
               <Text style={styles.actionBtnText}>Add Money</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.actionBtn, { backgroundColor: "#3b82f6" }]}
+              onPress={() => navigation.navigate("AddGoal", { goal: item })}
+            >
+              <Text style={styles.actionBtnText}>Edit</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.actionBtn, { backgroundColor: "#f87171" }]}

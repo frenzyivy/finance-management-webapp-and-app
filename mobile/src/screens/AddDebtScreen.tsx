@@ -9,10 +9,12 @@ import {
   Alert,
   ActivityIndicator,
 } from "react-native";
+import { useRoute, RouteProp } from "@react-navigation/native";
 import { supabase } from "../lib/supabase";
 import { DebtType, PriorityLevel } from "../types/database";
 import { PickerModal } from "../components/PickerModal";
 import { DEBT_TYPES } from "../lib/constants";
+import type { RootStackParamList } from "../navigation/AppNavigator";
 
 const PRIORITY_OPTIONS = [
   { value: "high", label: "High" },
@@ -21,14 +23,18 @@ const PRIORITY_OPTIONS = [
 ];
 
 export function AddDebtScreen({ navigation }: any) {
-  const [name, setName] = useState("");
-  const [type, setType] = useState<DebtType>("credit_card");
-  const [lender, setLender] = useState("");
-  const [principalAmount, setPrincipalAmount] = useState("");
-  const [currentBalance, setCurrentBalance] = useState("");
-  const [interestRate, setInterestRate] = useState("");
-  const [minimumPayment, setMinimumPayment] = useState("");
-  const [dueDate, setDueDate] = useState("");
+  const route = useRoute<RouteProp<RootStackParamList, "AddDebt">>();
+  const existingDebt = route.params?.debt;
+  const isEditing = !!existingDebt;
+
+  const [name, setName] = useState(existingDebt?.name ?? "");
+  const [type, setType] = useState<DebtType>(existingDebt?.type ?? "credit_card");
+  const [lender, setLender] = useState(existingDebt?.creditor_name ?? "");
+  const [principalAmount, setPrincipalAmount] = useState(existingDebt ? String(existingDebt.original_amount) : "");
+  const [currentBalance, setCurrentBalance] = useState(existingDebt ? String(existingDebt.outstanding_balance) : "");
+  const [interestRate, setInterestRate] = useState(existingDebt?.interest_rate != null ? String(existingDebt.interest_rate) : "");
+  const [minimumPayment, setMinimumPayment] = useState(existingDebt?.emi_amount != null ? String(existingDebt.emi_amount) : "");
+  const [dueDate, setDueDate] = useState(existingDebt?.expected_payoff_date ?? "");
   const [priority, setPriority] = useState<PriorityLevel>("medium");
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
@@ -64,19 +70,21 @@ export function AddDebtScreen({ navigation }: any) {
       const interest = interestRate ? parseFloat(interestRate) : null;
       const minPay = minimumPayment ? parseFloat(minimumPayment) : null;
 
-      const { error } = await supabase.from("debts").insert({
-        user_id: user.id,
+      const payload = {
         name: name.trim(),
         type,
-        principal_amount: principal,
-        current_balance: balance,
+        creditor_name: lender.trim() || name.trim(),
+        original_amount: principal,
+        outstanding_balance: balance,
         interest_rate: interest,
-        minimum_payment: minPay,
-        due_date: dueDate || null,
-        status: balance <= 0 ? "paid_off" : "active",
-        priority,
-        lender: lender.trim() || null,
-      });
+        emi_amount: minPay,
+        expected_payoff_date: dueDate || null,
+        status: balance <= 0 ? "paid_off" : "active" as const,
+      };
+
+      const { error } = isEditing
+        ? await supabase.from("debts").update(payload).eq("id", existingDebt!.id)
+        : await supabase.from("debts").insert({ ...payload, user_id: user.id, start_date: new Date().toISOString().split("T")[0] });
 
       if (error) throw error;
       navigation.goBack();
@@ -208,7 +216,7 @@ export function AddDebtScreen({ navigation }: any) {
         {saving ? (
           <ActivityIndicator color="#fff" />
         ) : (
-          <Text style={styles.saveBtnText}>Save Debt</Text>
+          <Text style={styles.saveBtnText}>{isEditing ? "Update Debt" : "Save Debt"}</Text>
         )}
       </TouchableOpacity>
     </ScrollView>

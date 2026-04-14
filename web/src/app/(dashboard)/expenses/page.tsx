@@ -66,6 +66,7 @@ const CATEGORY_COLORS: Record<ExpenseCategory, string> = {
   subscriptions: "bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-300",
   family_personal: "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300",
   miscellaneous: "bg-slate-100 text-slate-700 dark:bg-slate-900/30 dark:text-slate-300",
+  debt_repayment: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300",
 };
 
 function getCategoryColor(category: ExpenseCategory): string {
@@ -409,12 +410,54 @@ export default function ExpensesPage() {
                     {entry.payee_name}
                   </TableCell>
                   <TableCell>
-                    <Badge
-                      variant="secondary"
-                      className={getCategoryColor(entry.category)}
-                    >
-                      {getCategoryLabel(entry.category)}
-                    </Badge>
+                    <div className="flex flex-wrap items-center gap-1">
+                      <Badge
+                        variant="secondary"
+                        className={getCategoryColor(entry.category)}
+                      >
+                        {getCategoryLabel(entry.category)}
+                      </Badge>
+                      {entry.funding_source === "debt_funded" && (
+                        <Badge
+                          variant="secondary"
+                          className="bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300 text-[10px]"
+                        >
+                          Debt Funded
+                        </Badge>
+                      )}
+                      {entry.funding_source === "debt_repayment" && (
+                        <Badge
+                          variant="secondary"
+                          className="bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300 text-[10px]"
+                        >
+                          Repayment
+                        </Badge>
+                      )}
+                      {entry.funding_source === "mixed" && (
+                        <Badge
+                          variant="secondary"
+                          className="bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-300 text-[10px]"
+                        >
+                          Mixed
+                        </Badge>
+                      )}
+                      {entry.is_auto_generated && (
+                        <Badge
+                          variant="secondary"
+                          className="bg-gray-100 text-gray-500 dark:bg-gray-800/50 dark:text-gray-400 text-[10px]"
+                        >
+                          Auto
+                        </Badge>
+                      )}
+                      {entry.is_recurring && !entry.is_auto_generated && (
+                        <Badge
+                          variant="secondary"
+                          className="bg-blue-100 text-blue-600 dark:bg-blue-900/40 dark:text-blue-300 text-[10px]"
+                        >
+                          Recurring
+                        </Badge>
+                      )}
+                    </div>
                   </TableCell>
                   <TableCell className="text-right font-medium">
                     {formatCurrency(entry.amount)}

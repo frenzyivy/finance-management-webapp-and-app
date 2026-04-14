@@ -14,6 +14,7 @@ import {
   Database,
   Target,
   AlertTriangle,
+  Bell,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -714,6 +715,31 @@ function DataExportTab() {
   const [exportingExpenses, setExportingExpenses] = useState(false);
   const [exportingGoals, setExportingGoals] = useState(false);
   const [exportingDebts, setExportingDebts] = useState(false);
+  const [generating, setGenerating] = useState(false);
+  const [lastGenResult, setLastGenResult] = useState<{
+    entries_created: number;
+  } | null>(null);
+
+  const handleGenerateRecurring = async () => {
+    if (!user) return;
+    setGenerating(true);
+    setLastGenResult(null);
+    try {
+      const supabase = createClient();
+      const { data, error } = await supabase.rpc("generate_recurring_entries");
+      if (error) throw error;
+      setLastGenResult(data as { entries_created: number });
+      const count = (data as { entries_created: number })?.entries_created ?? 0;
+      if (count > 0) {
+        toast.success(`${count} recurring ${count === 1 ? "entry" : "entries"} generated`);
+      } else {
+        toast.info("No recurring entries due today");
+      }
+    } catch {
+      toast.error("Failed to generate recurring entries");
+    }
+    setGenerating(false);
+  };
 
   function downloadCSV(filename: string, csvContent: string) {
     const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
@@ -816,16 +842,52 @@ function DataExportTab() {
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Data & Export</CardTitle>
-        <CardDescription>
-          Download your financial data as CSV files for backup or analysis.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-6">
-        <div>
-          <Button onClick={exportAll} disabled={exportingAll}>
+    <div className="space-y-6">
+      {/* Recurring Entries */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Recurring Entries</CardTitle>
+          <CardDescription>
+            Automatically generate income and expense entries from your recurring templates.
+            This runs daily at midnight IST, but you can trigger it manually here.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center gap-3">
+            <Button onClick={handleGenerateRecurring} disabled={generating}>
+              {generating ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Plus className="size-4" />
+              )}
+              {generating ? "Generating..." : "Generate Now"}
+            </Button>
+            {lastGenResult && (
+              <p className="text-sm text-muted-foreground">
+                {lastGenResult.entries_created > 0
+                  ? `${lastGenResult.entries_created} ${lastGenResult.entries_created === 1 ? "entry" : "entries"} created`
+                  : "All caught up — no entries due"}
+              </p>
+            )}
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Entries marked as recurring will auto-generate new entries on their due dates.
+            Auto-generated entries show an &quot;Auto&quot; badge in your transaction lists.
+          </p>
+        </CardContent>
+      </Card>
+
+      {/* Data Export */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Data & Export</CardTitle>
+          <CardDescription>
+            Download your financial data as CSV files for backup or analysis.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div>
+            <Button onClick={exportAll} disabled={exportingAll}>
             {exportingAll ? (
               <Loader2 className="size-4 animate-spin" />
             ) : (
@@ -901,6 +963,7 @@ function DataExportTab() {
         </div>
       </CardContent>
     </Card>
+    </div>
   );
 }
 
@@ -1069,6 +1132,138 @@ function AccountTab() {
   );
 }
 
+// ── Notifications Tab ──────────────────────────────────────────────────
+
+function NotificationsTab() {
+  const { user } = useUser();
+  const [reminderDays, setReminderDays] = useState("5");
+  const [remindersEnabled, setRemindersEnabled] = useState(true);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [hasExistingRow, setHasExistingRow] = useState(false);
+
+  useEffect(() => {
+    if (!user) return;
+    const supabase = createClient();
+    supabase
+      .from("notification_preferences")
+      .select("*")
+      .eq("user_id", user.id)
+      .single()
+      .then(({ data }) => {
+        if (data) {
+          setReminderDays(String(data.reminder_days_before));
+          setRemindersEnabled(data.reminders_enabled);
+          setHasExistingRow(true);
+        }
+        setLoading(false);
+      });
+  }, [user]);
+
+  const handleSave = async () => {
+    if (!user) return;
+    const days = Number(reminderDays);
+    if (isNaN(days) || days < 1 || days > 30) {
+      toast.error("Reminder days must be between 1 and 30");
+      return;
+    }
+
+    setSaving(true);
+    const supabase = createClient();
+    const payload = {
+      reminder_days_before: days,
+      reminders_enabled: remindersEnabled,
+      updated_at: new Date().toISOString(),
+    };
+
+    if (hasExistingRow) {
+      const { error } = await supabase
+        .from("notification_preferences")
+        .update(payload)
+        .eq("user_id", user.id);
+      if (error) {
+        toast.error("Failed to save notification preferences");
+      } else {
+        toast.success("Notification preferences updated");
+      }
+    } else {
+      const { error } = await supabase
+        .from("notification_preferences")
+        .insert({ ...payload, user_id: user.id });
+      if (error) {
+        toast.error("Failed to save notification preferences");
+      } else {
+        setHasExistingRow(true);
+        toast.success("Notification preferences saved");
+      }
+    }
+    setSaving(false);
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="size-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Payment Reminders</CardTitle>
+        <CardDescription>
+          Configure when you want to be reminded about upcoming EMI payments.
+          Reminders appear as a notification badge in the header.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        <div className="flex items-center justify-between rounded-lg border p-4">
+          <div>
+            <p className="text-sm font-medium">Enable Reminders</p>
+            <p className="text-xs text-muted-foreground">
+              Show upcoming payment reminders in the notification bell
+            </p>
+          </div>
+          <Button
+            variant={remindersEnabled ? "default" : "outline"}
+            size="sm"
+            onClick={() => setRemindersEnabled(!remindersEnabled)}
+          >
+            {remindersEnabled ? "Enabled" : "Disabled"}
+          </Button>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="reminder-days">Remind me before (days)</Label>
+          <p className="text-xs text-muted-foreground">
+            You will see reminders for payments due within this many days.
+          </p>
+          <Input
+            id="reminder-days"
+            type="number"
+            min="1"
+            max="30"
+            value={reminderDays}
+            onChange={(e) => setReminderDays(e.target.value)}
+            className="w-24"
+            disabled={!remindersEnabled}
+          />
+        </div>
+
+        <Button onClick={handleSave} disabled={saving}>
+          {saving ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : (
+            <Save className="size-4" />
+          )}
+          {saving ? "Saving..." : "Save Preferences"}
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
 // ── Main Settings Page ──────────────────────────────────────────────────
 
 export default function SettingsPage() {
@@ -1095,6 +1290,10 @@ export default function SettingsPage() {
             <CreditCardIcon className="size-4" />
             Credit Cards
           </TabsTrigger>
+          <TabsTrigger value="notifications">
+            <Bell className="size-4" />
+            Notifications
+          </TabsTrigger>
           <TabsTrigger value="export">
             <Database className="size-4" />
             Data & Export
@@ -1113,6 +1312,9 @@ export default function SettingsPage() {
         </TabsContent>
         <TabsContent value="cards">
           <CreditCardsTab />
+        </TabsContent>
+        <TabsContent value="notifications">
+          <NotificationsTab />
         </TabsContent>
         <TabsContent value="export">
           <DataExportTab />

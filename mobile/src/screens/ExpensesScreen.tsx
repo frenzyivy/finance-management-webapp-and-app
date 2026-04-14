@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { supabase } from "../lib/supabase";
+import { useSyncStore } from "../lib/sync-store";
 import { formatCurrency, formatDate } from "../lib/format";
 import { EXPENSE_CATEGORIES, PAYMENT_METHODS } from "../lib/constants";
 import type { ExpenseEntry } from "../types/database";
@@ -46,6 +47,7 @@ function getCategoryColor(category: string): string {
 
 export function ExpensesScreen() {
   const navigation = useNavigation<any>();
+  const syncVersion = useSyncStore((s) => s.syncVersion);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [entries, setEntries] = useState<ExpenseEntry[]>([]);
@@ -83,7 +85,7 @@ export function ExpensesScreen() {
 
   useEffect(() => {
     fetchData();
-  }, [fetchData]);
+  }, [fetchData, syncVersion]);
 
   useEffect(() => {
     const unsubscribe = navigation.addListener("focus", () => {
@@ -97,13 +99,17 @@ export function ExpensesScreen() {
     fetchData();
   }, [fetchData]);
 
-  const handleDelete = useCallback(
+  const handleLongPress = useCallback(
     (entry: ExpenseEntry) => {
       Alert.alert(
-        "Delete Expense",
-        `Are you sure you want to delete this expense of ${formatCurrency(entry.amount)}?`,
+        entry.payee_name ?? getCategoryLabel(entry.category),
+        formatCurrency(entry.amount),
         [
           { text: "Cancel", style: "cancel" },
+          {
+            text: "Edit",
+            onPress: () => navigation.navigate("AddExpense", { entry }),
+          },
           {
             text: "Delete",
             style: "destructive",
@@ -123,7 +129,7 @@ export function ExpensesScreen() {
         ]
       );
     },
-    [fetchData]
+    [fetchData, navigation]
   );
 
   const renderItem = ({ item }: { item: ExpenseEntry }) => {
@@ -131,12 +137,12 @@ export function ExpensesScreen() {
     return (
       <TouchableOpacity
         style={styles.entryRow}
-        onLongPress={() => handleDelete(item)}
+        onLongPress={() => handleLongPress(item)}
         activeOpacity={0.7}
       >
         <View style={styles.entryLeft}>
           <Text style={styles.entryDescription} numberOfLines={1}>
-            {item.description ?? getCategoryLabel(item.category)}
+            {item.payee_name ?? getCategoryLabel(item.category)}
           </Text>
           <View style={styles.entryMeta}>
             <View style={[styles.badge, { backgroundColor: catColor + "20" }]}>
@@ -144,6 +150,16 @@ export function ExpensesScreen() {
                 {getCategoryLabel(item.category)}
               </Text>
             </View>
+            {item.is_auto_generated && (
+              <View style={[styles.badge, { backgroundColor: "#e5e7eb" }]}>
+                <Text style={[styles.badgeText, { color: "#6b7280" }]}>Auto</Text>
+              </View>
+            )}
+            {item.is_recurring && !item.is_auto_generated && (
+              <View style={[styles.badge, { backgroundColor: "#dbeafe" }]}>
+                <Text style={[styles.badgeText, { color: "#2563eb" }]}>Recurring</Text>
+              </View>
+            )}
             {item.payment_method && (
               <Text style={styles.paymentMethod}>
                 {getPaymentMethodLabel(item.payment_method)}

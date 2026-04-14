@@ -9,7 +9,7 @@
 INSERT INTO income_entries (user_id, amount, category, source_name, date, payment_method, is_recurring, recurrence_frequency, notes)
 VALUES
     ('YOUR_TEST_USER_UUID', 50000.00, 'salary', 'TechCorp', '2026-04-01', 'bank_transfer', true, 'monthly', 'Monthly salary'),
-    ('YOUR_TEST_USER_UUID', 15000.00, 'freelance', 'Alainza Bizz', '2026-04-05', 'upi', false, null, 'Website project'),
+    ('YOUR_TEST_USER_UUID', 15000.00, 'freelance', 'Allianza Biz', '2026-04-05', 'upi', false, null, 'Website project'),
     ('YOUR_TEST_USER_UUID', 2500.00, 'side_income', 'YouTube', '2026-03-28', 'bank_transfer', false, null, 'Ad revenue');
 
 -- Sample expense entries

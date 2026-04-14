@@ -1,3 +1,26 @@
+// ── Re-export BNPL types ──
+export type {
+  BnplPlatformType,
+  BnplPlatformStatus,
+  BnplPurchaseStatus,
+  BnplPaymentStatus,
+  BnplBillStatus,
+  BnplInterestRateType,
+  BnplInvoiceFileType,
+  BnplInvoiceFile,
+  BnplPurchaseCategory,
+  BnplPlatform,
+  BnplPlatformWithStats,
+  BnplPurchase,
+  BnplPayment,
+  BnplBill,
+  BnplBillPaymentItem,
+  BnplBillWithPayments,
+  BnplPurchaseWithPayments,
+  BnplPlatformWithPurchases,
+  BnplUpcomingEMI,
+} from "./bnpl";
+
 // ── Category type aliases ──
 
 export type IncomeCategory =
@@ -20,7 +43,11 @@ export type ExpenseCategory =
   | "entertainment"
   | "subscriptions"
   | "family_personal"
-  | "miscellaneous";
+  | "miscellaneous"
+  | "debt_repayment";
+
+export type FundingSource = "own_funds" | "debt_funded" | "debt_repayment" | "mixed";
+export type AllocationType = "debt_usage" | "debt_repayment";
 
 export type PaymentMethod =
   | "bank_transfer"
@@ -78,6 +105,11 @@ export interface IncomeEntry {
   recurrence_frequency: RecurrenceFrequency | null;
   linked_debt_id: string | null;
   notes: string | null;
+  is_auto_generated: boolean;
+  source_recurring_id: string | null;
+  last_recurrence_date: string | null;
+  is_business_withdrawal: boolean;
+  linked_transfer_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -98,6 +130,13 @@ export interface ExpenseEntry {
   recurrence_frequency: RecurrenceFrequency | null;
   receipt_url: string | null;
   notes: string | null;
+  funding_source: FundingSource;
+  is_auto_generated: boolean;
+  source_debt_payment_id: string | null;
+  source_recurring_id: string | null;
+  last_recurrence_date: string | null;
+  is_business_investment: boolean;
+  linked_transfer_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -145,9 +184,21 @@ export interface Debt {
   start_date: string;
   expected_payoff_date: string | null;
   status: DebtStatus;
+  allocated_amount: number;
   notes: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface DebtAllocation {
+  id: string;
+  debt_id: string;
+  expense_id: string;
+  user_id: string;
+  amount: number;
+  description: string | null;
+  date: string;
+  created_at: string;
 }
 
 export interface DebtPayment {
@@ -157,6 +208,9 @@ export interface DebtPayment {
   amount: number;
   date: string;
   notes: string | null;
+  linked_expense_id: string | null;
+  is_auto_generated: boolean;
+  source_expense_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -168,4 +222,67 @@ export interface BudgetLimit {
   monthly_limit: number;
   created_at: string;
   updated_at: string;
+}
+
+// ── Import types ──
+
+export type ImportSource = "sms" | "bank_statement_csv" | "bank_statement_pdf";
+export type TransactionType = "debit" | "credit";
+export type ImportStatus = "pending" | "imported" | "rejected" | "duplicate";
+
+export interface ImportedTransaction {
+  id: string;
+  user_id: string;
+  import_source: ImportSource;
+  raw_text: string | null;
+  import_batch_id: string | null;
+  parsed_amount: number;
+  parsed_type: TransactionType;
+  parsed_date: string;
+  parsed_reference: string | null;
+  parsed_account_hint: string | null;
+  parsed_description: string | null;
+  assigned_category: string | null;
+  assigned_payee_name: string | null;
+  assigned_payment_method: string | null;
+  status: ImportStatus;
+  linked_expense_id: string | null;
+  linked_income_id: string | null;
+  dedup_hash: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// ── Privacy-first local staging types ──
+
+/** A parsed transaction that lives only in the browser — never stored in cloud */
+export interface LocalParsedTransaction {
+  local_id: string;
+  amount: number;
+  transaction_type: TransactionType;
+  date: string;
+  description: string | null;
+  reference: string | null;
+  dedup_hash: string | null;
+  is_duplicate: boolean;
+  import_source: ImportSource;
+  import_batch_id: string;
+}
+
+/** Response from the upload-statement endpoint (no DB rows created) */
+export interface ParsedStatementResponse {
+  batch_id: string;
+  source: ImportSource;
+  transactions: {
+    amount: number;
+    transaction_type: TransactionType;
+    date: string;
+    description: string | null;
+    reference: string | null;
+    dedup_hash: string | null;
+    is_duplicate: boolean;
+  }[];
+  total_count: number;
+  duplicate_count: number;
 }

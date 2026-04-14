@@ -9,9 +9,11 @@ import {
   Alert,
   ActivityIndicator,
 } from "react-native";
+import { useRoute, RouteProp } from "@react-navigation/native";
 import { supabase } from "../lib/supabase";
 import { PriorityLevel } from "../types/database";
 import { PickerModal } from "../components/PickerModal";
+import type { RootStackParamList } from "../navigation/AppNavigator";
 
 const PRIORITY_OPTIONS = [
   { value: "high", label: "High" },
@@ -31,10 +33,14 @@ const ICON_OPTIONS = [
 ];
 
 export function AddGoalScreen({ navigation }: any) {
-  const [name, setName] = useState("");
-  const [targetAmount, setTargetAmount] = useState("");
-  const [priority, setPriority] = useState<PriorityLevel>("medium");
-  const [deadline, setDeadline] = useState("");
+  const route = useRoute<RouteProp<RootStackParamList, "AddGoal">>();
+  const existingGoal = route.params?.goal;
+  const isEditing = !!existingGoal;
+
+  const [name, setName] = useState(existingGoal?.name ?? "");
+  const [targetAmount, setTargetAmount] = useState(existingGoal ? String(existingGoal.target_amount) : "");
+  const [priority, setPriority] = useState<PriorityLevel>(existingGoal?.priority ?? "medium");
+  const [deadline, setDeadline] = useState(existingGoal?.target_date ?? "");
   const [selectedColor, setSelectedColor] = useState(COLOR_OPTIONS[0]);
   const [selectedIcon, setSelectedIcon] = useState("piggy-bank");
   const [saving, setSaving] = useState(false);
@@ -61,17 +67,26 @@ export function AddGoalScreen({ navigation }: any) {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Not authenticated");
 
-      const { error } = await supabase.from("savings_goals").insert({
-        user_id: user.id,
-        name: name.trim(),
-        target_amount: amount,
-        current_amount: 0,
-        deadline: deadline || null,
-        status: "active",
-        priority,
-      });
-
-      if (error) throw error;
+      if (isEditing) {
+        const { error } = await supabase.from("savings_goals").update({
+          name: name.trim(),
+          target_amount: amount,
+          target_date: deadline || null,
+          priority,
+        }).eq("id", existingGoal!.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from("savings_goals").insert({
+          user_id: user.id,
+          name: name.trim(),
+          target_amount: amount,
+          current_balance: 0,
+          target_date: deadline || null,
+          status: "active",
+          priority,
+        });
+        if (error) throw error;
+      }
       navigation.goBack();
     } catch (err: any) {
       Alert.alert("Error", err.message || "Failed to save goal");
@@ -172,7 +187,7 @@ export function AddGoalScreen({ navigation }: any) {
         {saving ? (
           <ActivityIndicator color="#fff" />
         ) : (
-          <Text style={styles.saveBtnText}>Save Goal</Text>
+          <Text style={styles.saveBtnText}>{isEditing ? "Update Goal" : "Save Goal"}</Text>
         )}
       </TouchableOpacity>
     </ScrollView>

@@ -27,7 +27,7 @@ Track every rupee coming in, categorized by source.
 | Category | Description | Example |
 |----------|-------------|---------|
 | Salary | Monthly salary from employment | ₹XX,XXX from [Employer] |
-| Freelance / Agency | Income from Alainza Bizz or freelance gigs | Client payments, project fees |
+| Freelance / Agency | Income from Allianza Biz or freelance gigs | Client payments, project fees |
 | Borrowed Money | Money borrowed from friends, family, or others | ₹5,000 from [Friend Name] |
 | Side Income | YouTube, affiliate, ad revenue, etc. | YouTube earnings, referral bonuses |
 | Other | Any miscellaneous income | Gifts, cashback, refunds |

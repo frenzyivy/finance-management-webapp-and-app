@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     jwt_secret: str = ""
     backend_port: int = 8000
     cors_origins: str = "http://localhost:3000,http://localhost:8081"
+    anthropic_api_key: str = ""
 
     @property
     def cors_origins_list(self) -> list[str]:

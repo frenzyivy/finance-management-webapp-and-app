@@ -6,10 +6,14 @@ import {
   ScrollView,
   RefreshControl,
   ActivityIndicator,
+  TouchableOpacity,
 } from "react-native";
+import { useNavigation } from "@react-navigation/native";
 import { supabase } from "../lib/supabase";
+import { useSyncStore } from "../lib/sync-store";
 import { formatCurrency, formatDate } from "../lib/format";
 import { INCOME_CATEGORIES, EXPENSE_CATEGORIES } from "../lib/constants";
+import { BudgetAlert } from "../components/BudgetAlert";
 import type { IncomeEntry, ExpenseEntry, SavingsGoal } from "../types/database";
 
 type Transaction = {
@@ -30,6 +34,8 @@ function getCategoryLabel(
 }
 
 export function DashboardScreen() {
+  const navigation = useNavigation<any>();
+  const syncVersion = useSyncStore((s) => s.syncVersion);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [totalIncome, setTotalIncome] = useState(0);
@@ -72,7 +78,7 @@ export function DashboardScreen() {
 
       const incomeTotal = incomeData.reduce((s, i) => s + i.amount, 0);
       const expenseTotal = expenseData.reduce((s, e) => s + e.amount, 0);
-      const savingsTotal = goalsData.reduce((s, g) => s + g.current_amount, 0);
+      const savingsTotal = goalsData.reduce((s, g) => s + g.current_balance, 0);
 
       setTotalIncome(incomeTotal);
       setTotalExpenses(expenseTotal);
@@ -82,7 +88,7 @@ export function DashboardScreen() {
         ...incomeData.map((i) => ({
           id: i.id,
           type: "income" as const,
-          description: i.source,
+          description: i.source_name,
           category: i.category,
           date: i.date,
           amount: i.amount,
@@ -90,7 +96,7 @@ export function DashboardScreen() {
         ...expenseData.map((e) => ({
           id: e.id,
           type: "expense" as const,
-          description: e.description ?? "Expense",
+          description: e.payee_name ?? "Expense",
           category: e.category,
           date: e.date,
           amount: e.amount,
@@ -110,7 +116,7 @@ export function DashboardScreen() {
 
   useEffect(() => {
     fetchData();
-  }, [fetchData]);
+  }, [fetchData, syncVersion]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
@@ -180,6 +186,25 @@ export function DashboardScreen() {
           </Text>
         </View>
       </View>
+
+      {/* Budget Alerts */}
+      <BudgetAlert />
+
+      {/* Import Transactions Card */}
+      <TouchableOpacity
+        style={styles.importCard}
+        onPress={() => navigation.navigate("Imports")}
+        activeOpacity={0.7}
+      >
+        <Text style={styles.importIcon}>📥</Text>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.importTitle}>Import Transactions</Text>
+          <Text style={styles.importDesc}>
+            Scan SMS or upload bank statements
+          </Text>
+        </View>
+        <Text style={styles.importArrow}>→</Text>
+      </TouchableOpacity>
 
       {/* Recent Transactions */}
       <Text style={styles.sectionTitle}>Recent Transactions</Text>
@@ -299,6 +324,35 @@ const styles = StyleSheet.create({
   cardAmount: {
     fontSize: 18,
     fontWeight: "700",
+  },
+  importCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#f0fdfa",
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: "#99f6e4",
+  },
+  importIcon: {
+    fontSize: 24,
+    marginRight: 12,
+  },
+  importTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#0d9488",
+  },
+  importDesc: {
+    fontSize: 12,
+    color: "#6b7280",
+    marginTop: 2,
+  },
+  importArrow: {
+    fontSize: 18,
+    color: "#0d9488",
+    fontWeight: "600",
   },
   sectionTitle: {
     fontSize: 18,

@@ -4,16 +4,35 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { PiggyBank, X, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { NAV_ITEMS } from "@/lib/constants/navigation";
+import { NAV_SECTIONS } from "@/lib/constants/navigation";
+import type { NavItem, NavSection } from "@/lib/constants/navigation";
 import { cn } from "@/lib/utils";
 import { useUser } from "@/hooks/use-user";
 import { createClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
+import { SyncStatusIndicator } from "@/components/layout/sync-status";
 
 interface SidebarProps {
   open: boolean;
   onClose: () => void;
 }
+
+function isItemActive(pathname: string, href: string): boolean {
+  if (href === "/") return pathname === "/";
+  if (href === "/business") return pathname === "/business";
+  return pathname.startsWith(href);
+}
+
+const accentStyles = {
+  teal: {
+    active: "bg-teal-50 text-teal-700 hover:bg-teal-100 hover:text-teal-800 dark:bg-teal-950 dark:text-teal-300 dark:hover:bg-teal-900",
+    icon: "text-teal-600 dark:text-teal-400",
+  },
+  blue: {
+    active: "bg-blue-50 text-blue-700 hover:bg-blue-100 hover:text-blue-800 dark:bg-blue-950 dark:text-blue-300 dark:hover:bg-blue-900",
+    icon: "text-blue-600 dark:text-blue-400",
+  },
+};
 
 export function Sidebar({ open, onClose }: SidebarProps) {
   const pathname = usePathname();
@@ -33,6 +52,33 @@ export function Sidebar({ open, onClose }: SidebarProps) {
     }
     router.push("/login");
     router.refresh();
+  }
+
+  function renderNavItem(item: NavItem, section: NavSection) {
+    const isActive = isItemActive(pathname, item.href);
+    const Icon = item.icon;
+    const accent = section.accent || "teal";
+    const styles = accentStyles[accent];
+
+    return (
+      <Link
+        key={item.href}
+        href={item.href}
+        onClick={onClose}
+        className={cn(
+          "flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-muted",
+          isActive && styles.active
+        )}
+      >
+        <Icon
+          className={cn(
+            "h-5 w-5",
+            isActive ? styles.icon : "text-muted-foreground"
+          )}
+        />
+        {item.label}
+      </Link>
+    );
   }
 
   return (
@@ -74,37 +120,17 @@ export function Sidebar({ open, onClose }: SidebarProps) {
         </div>
 
         {/* Navigation links */}
-        <nav className="flex-1 space-y-1 px-3 py-4">
-          {NAV_ITEMS.map((item) => {
-            const isActive =
-              item.href === "/"
-                ? pathname === "/"
-                : pathname.startsWith(item.href);
-            const Icon = item.icon;
-
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                onClick={onClose}
-                className={cn(
-                  "flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-muted",
-                  isActive &&
-                    "bg-teal-50 text-teal-700 hover:bg-teal-100 hover:text-teal-800 dark:bg-teal-950 dark:text-teal-300 dark:hover:bg-teal-900"
-                )}
-              >
-                <Icon
-                  className={cn(
-                    "h-5 w-5",
-                    isActive
-                      ? "text-teal-600 dark:text-teal-400"
-                      : "text-muted-foreground"
-                  )}
-                />
-                {item.label}
-              </Link>
-            );
-          })}
+        <nav className="flex-1 overflow-y-auto px-3 py-4">
+          {NAV_SECTIONS.map((section) => (
+            <div key={section.title} className="mb-4">
+              <p className="mb-1 px-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                {section.title}
+              </p>
+              <div className="space-y-1">
+                {section.items.map((item) => renderNavItem(item, section))}
+              </div>
+            </div>
+          ))}
         </nav>
 
         {/* Bottom user section */}
@@ -116,6 +142,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
             <div className="flex-1 truncate">
               <p className="text-sm font-medium leading-none truncate">{userName}</p>
               <p className="text-xs text-muted-foreground truncate">{userEmail}</p>
+              <SyncStatusIndicator />
             </div>
             <Button
               variant="ghost"

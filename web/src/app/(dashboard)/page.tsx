@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { MoneyFlowSummary } from "@/components/dashboard/money-flow-summary";
 import { formatCurrency } from "@/lib/utils/currency";
 import { formatDate } from "@/lib/utils/date";
 import { createClient } from "@/lib/supabase/client";
@@ -243,6 +244,9 @@ export default function DashboardPage() {
           })}
         </div>
       )}
+
+      {/* Money Flow Summary */}
+      <MoneyFlowSummary />
 
       {/* Recent Transactions */}
       <div>

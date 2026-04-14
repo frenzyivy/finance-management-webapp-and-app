@@ -1,49 +1,77 @@
-# Environment
+# ===== Environment & Secrets (NEVER COMMIT) =====
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
+**/.env
+**/.env.*
+!**/.env.example
 
-# Dependencies
+# Credentials & Keys
+credentials.json
+token.json
+*.pem
+*.key
+*.jks
+*.p8
+*.p12
+*.mobileprovision
+service-account*.json
+*-credentials.json
+
+# ===== Claude / Agent local state =====
+.claude/
+
+# ===== Dependencies =====
 node_modules/
 __pycache__/
 *.pyc
 .venv/
 venv/
+env/
 
-# Build outputs
+# ===== Build outputs =====
 .next/
 out/
 dist/
 build/
 *.egg-info/
+*.tsbuildinfo
 
-# IDE
+# ===== IDE =====
 .vscode/
 .idea/
+*.swp
 
-# OS
+# ===== OS =====
 .DS_Store
 Thumbs.db
 
-# WAT framework
+# ===== WAT framework =====
 .tmp/
 
-# Credentials
-credentials.json
-token.json
-
-# Supabase
+# ===== Supabase =====
 supabase/.temp/
+supabase/.branches/
 
-# Expo
+# ===== Expo / React Native =====
 .expo/
-*.jks
-*.p8
-*.p12
-*.key
-*.mobileprovision
+.expo-shared/
 *.orig.*
 
-# Mobile build artifacts
-android/app/build/
-ios/Pods/
+# ===== Mobile build artifacts =====
+mobile/android/app/build/
+mobile/android/build/
+mobile/android/.gradle/
+mobile/ios/Pods/
+mobile/ios/build/
+
+# ===== Logs =====
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ===== Runtime / PM2 (if ever generated locally) =====
+.pm2/
+ecosystem.config.js.local

@@ -18,7 +18,11 @@ export type ExpenseCategory =
   | "entertainment"
   | "subscriptions"
   | "family_personal"
-  | "miscellaneous";
+  | "miscellaneous"
+  | "debt_repayment";
+
+export type FundingSource = "own_funds" | "debt_funded" | "debt_repayment" | "mixed";
+export type AllocationType = "debt_usage" | "debt_repayment";
 
 export type DebtType =
   | "credit_card"
@@ -45,8 +49,7 @@ export type PaymentMethod =
 
 export interface Profile {
   id: string;
-  email: string;
-  full_name: string | null;
+  name: string | null;
   currency: string;
   created_at: string;
   updated_at: string;
@@ -56,10 +59,9 @@ export interface CreditCard {
   id: string;
   user_id: string;
   card_name: string;
-  last_four_digits: string | null;
-  billing_cycle_day: number;
+  last_four_digits: string;
+  billing_cycle_day: number | null;
   credit_limit: number | null;
-  current_balance: number;
   created_at: string;
   updated_at: string;
 }
@@ -69,12 +71,18 @@ export interface IncomeEntry {
   user_id: string;
   amount: number;
   category: IncomeCategory;
-  source: string;
-  description: string | null;
+  source_name: string;
   date: string;
+  payment_method: string;
   is_recurring: boolean;
   recurrence_frequency: RecurrenceFrequency | null;
-  payment_method: PaymentMethod | null;
+  linked_debt_id: string | null;
+  notes: string | null;
+  is_auto_generated: boolean;
+  source_recurring_id: string | null;
+  last_recurrence_date: string | null;
+  is_business_withdrawal: boolean;
+  linked_transfer_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -84,12 +92,24 @@ export interface ExpenseEntry {
   user_id: string;
   amount: number;
   category: ExpenseCategory;
-  description: string | null;
+  sub_category: string | null;
+  payee_name: string;
   date: string;
+  payment_method: string;
+  credit_card_id: string | null;
+  is_emi: boolean;
+  linked_debt_id: string | null;
   is_recurring: boolean;
   recurrence_frequency: RecurrenceFrequency | null;
-  payment_method: PaymentMethod | null;
-  credit_card_id: string | null;
+  receipt_url: string | null;
+  notes: string | null;
+  funding_source: FundingSource;
+  is_auto_generated: boolean;
+  source_debt_payment_id: string | null;
+  source_recurring_id: string | null;
+  last_recurrence_date: string | null;
+  is_business_investment: boolean;
+  linked_transfer_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -99,10 +119,12 @@ export interface SavingsGoal {
   user_id: string;
   name: string;
   target_amount: number;
-  current_amount: number;
-  deadline: string | null;
-  status: GoalStatus;
+  current_balance: number;
   priority: PriorityLevel;
+  target_date: string | null;
+  color: string;
+  icon: string;
+  status: GoalStatus;
   created_at: string;
   updated_at: string;
 }
@@ -113,7 +135,8 @@ export interface SavingsContribution {
   user_id: string;
   amount: number;
   date: string;
-  note: string | null;
+  source_description: string | null;
+  notes: string | null;
   created_at: string;
 }
 
@@ -122,16 +145,32 @@ export interface Debt {
   user_id: string;
   name: string;
   type: DebtType;
-  principal_amount: number;
-  current_balance: number;
+  creditor_name: string;
+  original_amount: number;
+  outstanding_balance: number;
   interest_rate: number | null;
-  minimum_payment: number | null;
-  due_date: string | null;
+  emi_amount: number | null;
+  emi_day_of_month: number | null;
+  total_emis: number | null;
+  remaining_emis: number | null;
+  start_date: string;
+  expected_payoff_date: string | null;
   status: DebtStatus;
-  priority: PriorityLevel;
-  lender: string | null;
+  allocated_amount: number;
+  notes: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface DebtAllocation {
+  id: string;
+  debt_id: string;
+  expense_id: string;
+  user_id: string;
+  amount: number;
+  description: string | null;
+  date: string;
+  created_at: string;
 }
 
 export interface DebtPayment {
@@ -140,16 +179,124 @@ export interface DebtPayment {
   user_id: string;
   amount: number;
   date: string;
-  note: string | null;
+  notes: string | null;
+  linked_expense_id: string | null;
+  is_auto_generated: boolean;
+  source_expense_id: string | null;
   created_at: string;
 }
 
 export interface BudgetLimit {
   id: string;
   user_id: string;
-  category: ExpenseCategory;
+  category: string;
   monthly_limit: number;
-  month: string;
   created_at: string;
   updated_at: string;
+}
+
+// ── Import types ──
+
+export type ImportSource = "sms" | "bank_statement_csv" | "bank_statement_pdf";
+export type TransactionType = "debit" | "credit";
+export type ImportStatus = "pending" | "imported" | "rejected" | "duplicate";
+
+export interface ImportedTransaction {
+  id: string;
+  user_id: string;
+  import_source: ImportSource;
+  raw_text: string | null;
+  import_batch_id: string | null;
+  parsed_amount: number;
+  parsed_type: TransactionType;
+  parsed_date: string;
+  parsed_reference: string | null;
+  parsed_account_hint: string | null;
+  parsed_description: string | null;
+  assigned_category: string | null;
+  assigned_payee_name: string | null;
+  assigned_payment_method: string | null;
+  status: ImportStatus;
+  linked_expense_id: string | null;
+  linked_income_id: string | null;
+  dedup_hash: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** A parsed transaction that lives only on device — never stored in cloud */
+export interface LocalParsedTransaction {
+  local_id: string;
+  amount: number;
+  transaction_type: TransactionType;
+  date: string;
+  description: string | null;
+  reference: string | null;
+  dedup_hash: string | null;
+  is_duplicate: boolean;
+  import_source: ImportSource;
+  import_batch_id: string;
+}
+
+/** Response from upload-statement (no DB rows created) */
+export interface ParsedStatementResponse {
+  batch_id: string;
+  source: ImportSource;
+  transactions: {
+    amount: number;
+    transaction_type: TransactionType;
+    date: string;
+    description: string | null;
+    reference: string | null;
+    dedup_hash: string | null;
+    is_duplicate: boolean;
+  }[];
+  total_count: number;
+  duplicate_count: number;
+}
+
+// ── Credit Card Statement types ──
+
+export type CCStatementStatus =
+  | "upcoming"
+  | "due"
+  | "paid"
+  | "partially_paid"
+  | "overdue";
+
+export type CCTransactionType =
+  | "purchase"
+  | "refund"
+  | "fee"
+  | "interest"
+  | "payment"
+  | "cashback"
+  | "emi_charge";
+
+export interface CCStatement {
+  id: string;
+  user_id: string;
+  credit_card_id: string;
+  statement_date: string;
+  due_date: string;
+  total_amount_due: number;
+  minimum_amount_due: number;
+  interest_charged: number;
+  fees_charged: number;
+  amount_paid: number;
+  status: CCStatementStatus;
+  created_at: string;
+}
+
+export interface CCStatementTransaction {
+  id: string;
+  statement_id: string;
+  transaction_date: string;
+  description: string;
+  merchant_name: string | null;
+  amount: number;
+  transaction_type: CCTransactionType;
+  category: string | null;
+  is_approved: boolean;
 }

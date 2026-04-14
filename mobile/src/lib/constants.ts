@@ -20,6 +20,13 @@ export const EXPENSE_CATEGORIES = [
   { value: "subscriptions", label: "Subscriptions" },
   { value: "family_personal", label: "Family & Personal" },
   { value: "miscellaneous", label: "Miscellaneous" },
+  { value: "debt_repayment", label: "Debt Repayment" },
+] as const;
+
+export const FUNDING_SOURCES = [
+  { value: "own_funds", label: "Own Funds" },
+  { value: "debt_funded", label: "Debt Funded" },
+  { value: "debt_repayment", label: "Debt Repayment" },
 ] as const;
 
 export const PAYMENT_METHODS = [
@@ -44,4 +51,10 @@ export const RECURRENCE_FREQUENCIES = [
   { value: "monthly", label: "Monthly" },
   { value: "quarterly", label: "Quarterly" },
   { value: "yearly", label: "Yearly" },
+] as const;
+
+export const INCOME_SOURCE_TYPES = [
+  { value: "personal", label: "Personal (salary, family, side hustle)" },
+  { value: "client", label: "Client / business work" },
+  { value: "borrowed", label: "Borrowed from someone" },
 ] as const;

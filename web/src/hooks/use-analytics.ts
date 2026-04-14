@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { useSyncStore } from "@/lib/stores/sync-store";
 import type {
   IncomeEntry,
   ExpenseEntry,
@@ -45,6 +46,7 @@ interface SavingsGoalProgressItem {
 export function useAnalytics() {
   const [loading, setLoading] = useState(true);
   const [selectedMonth, setSelectedMonth] = useState<Date>(new Date());
+  const syncVersion = useSyncStore((s) => s.syncVersion);
 
   // Raw data
   const [incomeEntries, setIncomeEntries] = useState<IncomeEntry[]>([]);
@@ -113,7 +115,7 @@ export function useAnalytics() {
 
   useEffect(() => {
     fetchData();
-  }, [fetchData]);
+  }, [fetchData, syncVersion]);
 
   // Monthly Summary
   const totalIncome = incomeEntries.reduce((sum, e) => sum + e.amount, 0);

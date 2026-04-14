@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { Menu, Bell, Moon, Sun, Settings, LogOut } from "lucide-react";
+import { Menu, Moon, Sun, Settings, LogOut, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -15,6 +15,8 @@ import { useUser } from "@/hooks/use-user";
 import { useTheme } from "@/hooks/use-theme";
 import { createClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
+import { SyncDropdownItem } from "@/components/layout/sync-status";
+import { NotificationBell } from "@/components/layout/notification-bell";
 
 interface HeaderProps {
   onMenuClick: () => void;
@@ -63,9 +65,7 @@ export function Header({ onMenuClick }: HeaderProps) {
 
       {/* Right: notifications + user avatar */}
       <div className="flex items-center gap-2">
-        <Button variant="ghost" size="icon" className="relative">
-          <Bell className="h-5 w-5 text-muted-foreground" />
-        </Button>
+        <NotificationBell />
 
         <Button variant="ghost" size="icon" onClick={toggleTheme}>
           {theme === "light" ? (
@@ -99,6 +99,7 @@ export function Header({ onMenuClick }: HeaderProps) {
               <Settings className="mr-2 h-4 w-4" />
               Settings
             </DropdownMenuItem>
+            <SyncDropdownItem />
             <DropdownMenuSeparator />
             <DropdownMenuItem
               className="cursor-pointer text-destructive focus:text-destructive"

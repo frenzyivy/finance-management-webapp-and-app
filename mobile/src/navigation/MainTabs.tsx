@@ -1,10 +1,13 @@
 import React from "react";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { DashboardScreen } from "../screens/DashboardScreen";
+import { AnalyticsScreen } from "../screens/AnalyticsScreen";
 import { IncomeScreen } from "../screens/IncomeScreen";
 import { ExpensesScreen } from "../screens/ExpensesScreen";
 import { GoalsScreen } from "../screens/GoalsScreen";
 import { DebtsScreen } from "../screens/DebtsScreen";
+import { BudgetScreen } from "../screens/BudgetScreen";
+import { BusinessDashboardScreen } from "../screens/BusinessDashboardScreen";
 import { SettingsScreen } from "../screens/SettingsScreen";
 import { Text } from "react-native";
 
@@ -22,6 +25,15 @@ export function MainTabs() {
       <Tab.Screen
         name="Dashboard"
         component={DashboardScreen}
+        options={{
+          tabBarIcon: ({ color }) => (
+            <Text style={{ color, fontSize: 20 }}>🏠</Text>
+          ),
+        }}
+      />
+      <Tab.Screen
+        name="Analytics"
+        component={AnalyticsScreen}
         options={{
           tabBarIcon: ({ color }) => (
             <Text style={{ color, fontSize: 20 }}>📊</Text>
@@ -61,6 +73,28 @@ export function MainTabs() {
         options={{
           tabBarIcon: ({ color }) => (
             <Text style={{ color, fontSize: 20 }}>💳</Text>
+          ),
+        }}
+      />
+      <Tab.Screen
+        name="Budget"
+        component={BudgetScreen}
+        options={{
+          tabBarIcon: ({ color }) => (
+            <Text style={{ color, fontSize: 20 }}>🎯</Text>
+          ),
+        }}
+      />
+      <Tab.Screen
+        name="Business"
+        component={BusinessDashboardScreen}
+        options={{
+          title: "Allianza Biz",
+          headerStyle: { backgroundColor: "#185FA5" },
+          headerTintColor: "#fff",
+          tabBarActiveTintColor: "#185FA5",
+          tabBarIcon: ({ color }) => (
+            <Text style={{ color, fontSize: 20 }}>💼</Text>
           ),
         }}
       />

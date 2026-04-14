@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { SavingsGoal, SavingsContribution } from "@/types/database";
+import { useSyncStore } from "@/lib/stores/sync-store";
 
 const PRIORITY_ORDER: Record<string, number> = {
   high: 0,
@@ -13,6 +14,7 @@ const PRIORITY_ORDER: Record<string, number> = {
 export function useGoals() {
   const [goals, setGoals] = useState<SavingsGoal[]>([]);
   const [loading, setLoading] = useState(true);
+  const syncVersion = useSyncStore((s) => s.syncVersion);
 
   const fetchGoals = useCallback(async () => {
     setLoading(true);
@@ -38,7 +40,7 @@ export function useGoals() {
 
   useEffect(() => {
     fetchGoals();
-  }, [fetchGoals]);
+  }, [fetchGoals, syncVersion]);
 
   const deleteGoal = async (id: string) => {
     const supabase = createClient();

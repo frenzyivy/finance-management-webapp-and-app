@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { supabase } from "../lib/supabase";
+import { useSyncStore } from "../lib/sync-store";
 import { formatCurrency, formatDate } from "../lib/format";
 import { INCOME_CATEGORIES, PAYMENT_METHODS } from "../lib/constants";
 import type { IncomeEntry } from "../types/database";
@@ -26,6 +27,7 @@ function getPaymentMethodLabel(value: string | null): string {
 
 export function IncomeScreen() {
   const navigation = useNavigation<any>();
+  const syncVersion = useSyncStore((s) => s.syncVersion);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [entries, setEntries] = useState<IncomeEntry[]>([]);
@@ -63,7 +65,7 @@ export function IncomeScreen() {
 
   useEffect(() => {
     fetchData();
-  }, [fetchData]);
+  }, [fetchData, syncVersion]);
 
   useEffect(() => {
     const unsubscribe = navigation.addListener("focus", () => {
@@ -77,13 +79,17 @@ export function IncomeScreen() {
     fetchData();
   }, [fetchData]);
 
-  const handleDelete = useCallback(
+  const handleLongPress = useCallback(
     (entry: IncomeEntry) => {
       Alert.alert(
-        "Delete Income",
-        `Are you sure you want to delete "${entry.source}" (${formatCurrency(entry.amount)})?`,
+        entry.source_name,
+        formatCurrency(entry.amount),
         [
           { text: "Cancel", style: "cancel" },
+          {
+            text: "Edit",
+            onPress: () => navigation.navigate("AddIncome", { entry }),
+          },
           {
             text: "Delete",
             style: "destructive",
@@ -103,18 +109,18 @@ export function IncomeScreen() {
         ]
       );
     },
-    [fetchData]
+    [fetchData, navigation]
   );
 
   const renderItem = ({ item }: { item: IncomeEntry }) => (
     <TouchableOpacity
       style={styles.entryRow}
-      onLongPress={() => handleDelete(item)}
+      onLongPress={() => handleLongPress(item)}
       activeOpacity={0.7}
     >
       <View style={styles.entryLeft}>
         <Text style={styles.entrySource} numberOfLines={1}>
-          {item.source}
+          {item.source_name}
         </Text>
         <View style={styles.entryMeta}>
           <View style={styles.badge}>
@@ -122,6 +128,16 @@ export function IncomeScreen() {
               {getCategoryLabel(item.category)}
             </Text>
           </View>
+          {item.is_auto_generated && (
+            <View style={[styles.badge, { backgroundColor: "#e5e7eb" }]}>
+              <Text style={[styles.badgeText, { color: "#6b7280" }]}>Auto</Text>
+            </View>
+          )}
+          {item.is_recurring && !item.is_auto_generated && (
+            <View style={[styles.badge, { backgroundColor: "#dbeafe" }]}>
+              <Text style={[styles.badgeText, { color: "#2563eb" }]}>Recurring</Text>
+            </View>
+          )}
           {item.payment_method && (
             <Text style={styles.paymentMethod}>
               {getPaymentMethodLabel(item.payment_method)}
