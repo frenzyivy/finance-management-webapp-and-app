@@ -7,8 +7,8 @@ Deploy KomalFin to a self-hosted VPS with a custom domain, using Supabase Cloud 
 
 | Component | Where | URL |
 |-----------|-------|-----|
-| Web (Next.js) | VPS — PM2 + Nginx | `https://finance.komalvsingh.com` |
-| Backend (FastAPI) | VPS — systemd + Nginx | `https://api.finance.komalvsingh.com` |
+| Web (Next.js) | VPS — PM2 + Nginx | `https://finance.allianzaai.com` |
+| Backend (FastAPI) | VPS — systemd + Nginx | `https://api.finance.allianzaai.com` |
 | Database | Supabase Cloud | — |
 | Mobile | APK via EAS Build | sideloaded on Android |
 
@@ -36,7 +36,7 @@ git diff --cached | grep -iE "supabase.co|sk-ant-|eyJhbGc" && echo "STOP — sec
 
 ## PART 1 — DNS (do this first, propagation takes time)
 
-At your domain registrar for `komalvsingh.com`, add two A records:
+At your domain registrar for `allianzaai.com`, add two A records:
 
 | Type | Name | Value | TTL |
 |------|------|-------|-----|
@@ -45,8 +45,8 @@ At your domain registrar for `komalvsingh.com`, add two A records:
 
 Verify after 5–30 min:
 ```bash
-nslookup finance.komalvsingh.com
-nslookup api.finance.komalvsingh.com
+nslookup finance.allianzaai.com
+nslookup api.finance.allianzaai.com
 ```
 
 ---
@@ -116,7 +116,7 @@ SUPABASE_ANON_KEY=your_anon_key
 ANTHROPIC_API_KEY=sk-ant-...
 BACKEND_PORT=8000
 JWT_SECRET=generate-a-long-random-string
-CORS_ORIGINS=https://finance.komalvsingh.com
+CORS_ORIGINS=https://finance.allianzaai.com
 ```
 
 Lock it down:
@@ -162,7 +162,7 @@ nano ~/komalfin/web/.env.production
 ```
 NEXT_PUBLIC_SUPABASE_URL=https://YOUR_PROJECT.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key
-NEXT_PUBLIC_API_URL=https://api.finance.komalvsingh.com
+NEXT_PUBLIC_API_URL=https://api.finance.allianzaai.com
 ```
 ```bash
 chmod 600 ~/komalfin/web/.env.production
@@ -174,12 +174,12 @@ pm2 startup   # run the sudo command it prints
 
 ### 3f. Nginx — web site
 ```bash
-sudo nano /etc/nginx/sites-available/finance.komalvsingh.com
+sudo nano /etc/nginx/sites-available/finance.allianzaai.com
 ```
 ```nginx
 server {
     listen 80;
-    server_name finance.komalvsingh.com;
+    server_name finance.allianzaai.com;
 
     location / {
         proxy_pass http://127.0.0.1:3000;
@@ -197,12 +197,12 @@ server {
 
 ### 3g. Nginx — API site
 ```bash
-sudo nano /etc/nginx/sites-available/api.finance.komalvsingh.com
+sudo nano /etc/nginx/sites-available/api.finance.allianzaai.com
 ```
 ```nginx
 server {
     listen 80;
-    server_name api.finance.komalvsingh.com;
+    server_name api.finance.allianzaai.com;
     client_max_body_size 20M;
 
     location / {
@@ -218,20 +218,20 @@ server {
 
 Enable:
 ```bash
-sudo ln -s /etc/nginx/sites-available/finance.komalvsingh.com /etc/nginx/sites-enabled/
-sudo ln -s /etc/nginx/sites-available/api.finance.komalvsingh.com /etc/nginx/sites-enabled/
+sudo ln -s /etc/nginx/sites-available/finance.allianzaai.com /etc/nginx/sites-enabled/
+sudo ln -s /etc/nginx/sites-available/api.finance.allianzaai.com /etc/nginx/sites-enabled/
 sudo nginx -t && sudo systemctl reload nginx
 ```
 
 ### 3h. SSL (free, auto-renewing)
 ```bash
-sudo certbot --nginx -d finance.komalvsingh.com -d api.finance.komalvsingh.com
+sudo certbot --nginx -d finance.allianzaai.com -d api.finance.allianzaai.com
 ```
 Choose option to redirect HTTP → HTTPS.
 
 ### 3i. Verify
-- Browser: `https://finance.komalvsingh.com` → web app
-- Browser: `https://api.finance.komalvsingh.com/health` → `{"status":"ok"}` JSON
+- Browser: `https://finance.allianzaai.com` → web app
+- Browser: `https://api.finance.allianzaai.com/health` → `{"status":"ok"}` JSON
 
 ---
 
@@ -247,7 +247,7 @@ Set the API URL in `mobile/.env`:
 ```
 EXPO_PUBLIC_SUPABASE_URL=https://YOUR_PROJECT.supabase.co
 EXPO_PUBLIC_SUPABASE_ANON_KEY=your_anon_key
-EXPO_PUBLIC_API_URL=https://api.finance.komalvsingh.com
+EXPO_PUBLIC_API_URL=https://api.finance.allianzaai.com
 ```
 
 Build APK:
