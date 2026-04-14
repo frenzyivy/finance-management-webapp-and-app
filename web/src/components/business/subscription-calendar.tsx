@@ -184,7 +184,7 @@ export function SubscriptionCalendar({ subscriptions }: SubscriptionCalendarProp
 
           return (
             <Popover key={idx}>
-              <PopoverTrigger asChild>{cellContent}</PopoverTrigger>
+              <PopoverTrigger render={<div>{cellContent}</div>} />
               <PopoverContent className="w-72" align="start">
                 <div className="space-y-2">
                   <p className="text-sm font-semibold">
