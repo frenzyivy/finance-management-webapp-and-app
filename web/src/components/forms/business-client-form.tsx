@@ -54,7 +54,7 @@ export function BusinessClientForm({ entry, onSuccess, onCancel }: BusinessClien
   const {
     register, handleSubmit, watch, setValue, formState: { errors },
   } = useForm<FormValues>({
-    resolver: zodResolver(formSchema) as ReturnType<typeof zodResolver>,
+    resolver: zodResolver(formSchema) as any,
     defaultValues: {
       name: entry?.name ?? "",
       industry: entry?.industry ?? null,

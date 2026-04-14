@@ -84,7 +84,7 @@ export function BusinessIncomeForm({ entry, onSuccess, onCancel }: BusinessIncom
     setValue,
     formState: { errors },
   } = useForm<FormValues>({
-    resolver: zodResolver(formSchema) as ReturnType<typeof zodResolver>,
+    resolver: zodResolver(formSchema) as any,
     defaultValues: {
       amount: entry?.amount ?? (undefined as unknown as number),
       category: entry?.category ?? undefined,

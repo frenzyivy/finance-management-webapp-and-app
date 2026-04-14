@@ -64,7 +64,7 @@ export function BusinessSubscriptionForm({ entry, onSuccess, onCancel }: Busines
   const {
     register, handleSubmit, watch, setValue, formState: { errors },
   } = useForm<FormValues>({
-    resolver: zodResolver(formSchema) as ReturnType<typeof zodResolver>,
+    resolver: zodResolver(formSchema) as any,
     defaultValues: {
       name: entry?.name ?? "",
       category: entry?.category ?? undefined,

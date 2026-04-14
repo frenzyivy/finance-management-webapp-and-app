@@ -74,7 +74,7 @@ export function LogTransferForm({ onSuccess, onCancel }: LogTransferFormProps) {
   const {
     register, handleSubmit, watch, setValue, formState: { errors },
   } = useForm<FormValues>({
-    resolver: zodResolver(formSchema) as ReturnType<typeof zodResolver>,
+    resolver: zodResolver(formSchema) as any,
     defaultValues: {
       direction: "personal_to_business",
       amount: undefined as unknown as number,
