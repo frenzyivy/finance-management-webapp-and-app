@@ -73,6 +73,9 @@ export function HeroBalanceCard({
           className="flex items-baseline mt-3"
           style={{ fontWeight: 700, letterSpacing: "-0.02em" }}
         >
+          {netAmount < 0 && (
+            <span style={{ fontSize: 36, marginRight: 4 }}>−</span>
+          )}
           <span style={{ fontSize: 22, opacity: 0.7, marginRight: 2 }}>₹</span>
           <span style={{ fontSize: 36 }}>{formatAmount(netAmount)}</span>
         </div>

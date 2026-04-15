@@ -21,6 +21,7 @@ export function HeroBalanceCard({
     <View style={styles.card}>
       <Text style={styles.label}>{label}</Text>
       <View style={styles.amountRow}>
+        {netAmount < 0 && <Text style={styles.sign}>−</Text>}
         <Text style={styles.symbol}>₹</Text>
         <Text style={styles.amount}>{formatAmount(netAmount)}</Text>
       </View>
@@ -76,6 +77,14 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "flex-end",
     marginTop: 12,
+  },
+  sign: {
+    fontFamily: fonts.sansBold,
+    fontSize: 36,
+    color: "#fff",
+    letterSpacing: -0.72,
+    lineHeight: 40,
+    marginRight: 4,
   },
   symbol: {
     fontFamily: fonts.sansBold,
