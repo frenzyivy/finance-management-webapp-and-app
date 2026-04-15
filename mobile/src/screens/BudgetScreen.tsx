@@ -5,17 +5,22 @@ import {
   StyleSheet,
   ScrollView,
   TextInput,
-  TouchableOpacity,
+  Pressable,
   Alert,
   ActivityIndicator,
   RefreshControl,
   Modal,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { supabase } from "../lib/supabase";
 import { useSyncStore } from "../lib/sync-store";
 import { EXPENSE_CATEGORIES } from "../lib/constants";
-import { formatCurrency } from "../lib/format";
 import type { BudgetLimit, ExpenseCategory } from "../types/database";
+import { useTheme } from "../lib/theme-context";
+import { text as typography } from "../lib/typography";
+import { radii, navHeight } from "../lib/radii";
+import { PageHeader } from "../components/PageHeader";
+import { formatINR } from "../components/komal";
 
 interface CategoryBudget {
   category: ExpenseCategory;
@@ -26,6 +31,8 @@ interface CategoryBudget {
 }
 
 export function BudgetScreen() {
+  const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
   const syncVersion = useSyncStore((s) => s.syncVersion);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -60,13 +67,11 @@ export function BudgetScreen() {
       const budgets: BudgetLimit[] = budgetRes.data ?? [];
       const expenses = expenseRes.data ?? [];
 
-      // Compute spending per category
       const spentMap: Record<string, number> = {};
       for (const e of expenses) {
         spentMap[e.category] = (spentMap[e.category] ?? 0) + e.amount;
       }
 
-      // Build budget map
       const budgetMap: Record<string, BudgetLimit> = {};
       for (const b of budgets) {
         budgetMap[b.category] = b;
@@ -112,16 +117,13 @@ export function BudgetScreen() {
       if (!user) return;
 
       if (amount === 0 && selectedCategory.budgetId) {
-        // Remove limit
         await supabase.from("budget_limits").delete().eq("id", selectedCategory.budgetId);
       } else if (selectedCategory.budgetId) {
-        // Update existing
         await supabase
           .from("budget_limits")
           .update({ monthly_limit: amount })
           .eq("id", selectedCategory.budgetId);
       } else if (amount > 0) {
-        // Insert new
         await supabase.from("budget_limits").insert({
           user_id: user.id,
           category: selectedCategory.category,
@@ -159,8 +161,8 @@ export function BudgetScreen() {
 
   if (loading) {
     return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#0d9488" />
+      <View style={[styles.centered, { backgroundColor: colors.bg }]}>
+        <ActivityIndicator size="large" color={colors.accent} />
       </View>
     );
   }
@@ -168,112 +170,199 @@ export function BudgetScreen() {
   const categoriesWithLimits = categories.filter((c) => c.limit > 0);
   const categoriesWithoutLimits = categories.filter((c) => c.limit === 0);
 
+  const barColorFor = (pct: number) =>
+    pct >= 100 ? colors.expense : pct >= 80 ? colors.warning : colors.income;
+
   return (
-    <View style={styles.container}>
+    <View style={{ flex: 1, backgroundColor: colors.bg }}>
       <ScrollView
-        contentContainerStyle={styles.content}
+        contentContainerStyle={{
+          paddingBottom: navHeight + 40 + insets.bottom,
+        }}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchData(); }} colors={["#0d9488"]} />
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => {
+              setRefreshing(true);
+              fetchData();
+            }}
+            tintColor={colors.accent}
+          />
         }
       >
-        {/* Categories with limits */}
-        {categoriesWithLimits.length > 0 && (
-          <>
-            <Text style={styles.groupTitle}>Active Budgets</Text>
-            {categoriesWithLimits.map((cat) => {
-              const pct = cat.limit > 0 ? (cat.spent / cat.limit) * 100 : 0;
-              const barColor = pct >= 100 ? "#ef4444" : pct >= 80 ? "#f59e0b" : "#22c55e";
+        <PageHeader title="Budget" />
 
-              return (
-                <TouchableOpacity
-                  key={cat.category}
-                  style={styles.row}
-                  onPress={() => openSetLimit(cat)}
-                  activeOpacity={0.7}
-                >
-                  <View style={styles.rowHeader}>
-                    <Text style={styles.catLabel}>{cat.label}</Text>
-                    <Text style={[styles.pctText, { color: barColor }]}>
-                      {Math.round(pct)}%
-                    </Text>
-                  </View>
-                  <View style={styles.progressBg}>
-                    <View
-                      style={[
-                        styles.progressFill,
-                        {
-                          width: `${Math.min(pct, 100)}%`,
-                          backgroundColor: barColor,
-                        },
-                      ]}
-                    />
-                  </View>
-                  <Text style={styles.amountText}>
-                    {formatCurrency(cat.spent)} / {formatCurrency(cat.limit)}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </>
-        )}
-
-        {/* Categories without limits */}
-        <Text style={styles.groupTitle}>Set Budget For</Text>
-        {categoriesWithoutLimits.map((cat) => (
-          <TouchableOpacity
-            key={cat.category}
-            style={styles.row}
-            onPress={() => openSetLimit(cat)}
-            activeOpacity={0.7}
-          >
-            <View style={styles.rowHeader}>
-              <Text style={styles.catLabel}>{cat.label}</Text>
-              <Text style={styles.setLimitText}>Set Limit</Text>
-            </View>
-            {cat.spent > 0 && (
-              <Text style={styles.spentOnlyText}>
-                Spent: {formatCurrency(cat.spent)}
+        <View style={{ paddingHorizontal: 24 }}>
+          {/* Categories with limits */}
+          {categoriesWithLimits.length > 0 && (
+            <>
+              <Text
+                style={[
+                  typography.sectionTitle,
+                  { color: colors.textPrimary, marginTop: 4, marginBottom: 12 },
+                ]}
+              >
+                Active Budgets
               </Text>
-            )}
-          </TouchableOpacity>
-        ))}
+              {categoriesWithLimits.map((cat) => {
+                const pct = cat.limit > 0 ? (cat.spent / cat.limit) * 100 : 0;
+                const barColor = barColorFor(pct);
 
-        {/* Clear All */}
-        {categoriesWithLimits.length > 0 && (
-          <TouchableOpacity style={styles.clearBtn} onPress={clearAllLimits}>
-            <Text style={styles.clearBtnText}>Clear All Limits</Text>
-          </TouchableOpacity>
-        )}
+                return (
+                  <Pressable
+                    key={cat.category}
+                    onPress={() => openSetLimit(cat)}
+                    style={({ pressed }) => [
+                      styles.row,
+                      {
+                        backgroundColor: colors.surface,
+                        borderColor: colors.border,
+                        transform: [{ scale: pressed ? 0.98 : 1 }],
+                      },
+                    ]}
+                  >
+                    <View style={styles.rowHeader}>
+                      <Text style={[typography.body, { color: colors.textPrimary }]}>
+                        {cat.label}
+                      </Text>
+                      <Text style={[typography.body, { color: barColor }]}>
+                        {Math.round(pct)}%
+                      </Text>
+                    </View>
+                    <View style={[styles.progressBg, { backgroundColor: colors.surfaceAlt }]}>
+                      <View
+                        style={[
+                          styles.progressFill,
+                          {
+                            width: `${Math.min(pct, 100)}%`,
+                            backgroundColor: barColor,
+                          },
+                        ]}
+                      />
+                    </View>
+                    <Text style={[typography.caption, { color: colors.textSecondary }]}>
+                      {formatINR(cat.spent)} / {formatINR(cat.limit)}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </>
+          )}
+
+          <Text
+            style={[
+              typography.sectionTitle,
+              { color: colors.textPrimary, marginTop: 20, marginBottom: 12 },
+            ]}
+          >
+            Set Budget For
+          </Text>
+          {categoriesWithoutLimits.map((cat) => (
+            <Pressable
+              key={cat.category}
+              onPress={() => openSetLimit(cat)}
+              style={({ pressed }) => [
+                styles.row,
+                {
+                  backgroundColor: colors.surface,
+                  borderColor: colors.border,
+                  transform: [{ scale: pressed ? 0.98 : 1 }],
+                },
+              ]}
+            >
+              <View style={styles.rowHeader}>
+                <Text style={[typography.body, { color: colors.textPrimary }]}>
+                  {cat.label}
+                </Text>
+                <Text style={[typography.caption, { color: colors.accent }]}>Set Limit</Text>
+              </View>
+              {cat.spent > 0 && (
+                <Text style={[typography.caption, { color: colors.textSecondary }]}>
+                  Spent: {formatINR(cat.spent)}
+                </Text>
+              )}
+            </Pressable>
+          ))}
+
+          {categoriesWithLimits.length > 0 && (
+            <Pressable
+              onPress={clearAllLimits}
+              style={({ pressed }) => [
+                styles.clearBtn,
+                {
+                  backgroundColor: colors.expenseLight,
+                  transform: [{ scale: pressed ? 0.98 : 1 }],
+                },
+              ]}
+            >
+              <Text style={[typography.body, { color: colors.expense }]}>
+                Clear All Limits
+              </Text>
+            </Pressable>
+          )}
+        </View>
       </ScrollView>
 
       {/* Set Limit Modal */}
       <Modal visible={modalVisible} transparent animationType="fade">
         <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>
+          <View
+            style={[
+              styles.modalContent,
+              { backgroundColor: colors.surface, borderColor: colors.border },
+            ]}
+          >
+            <Text
+              style={[
+                typography.sectionTitle,
+                { color: colors.textPrimary, marginBottom: 16 },
+              ]}
+            >
               {selectedCategory?.label ?? ""} - Monthly Limit
             </Text>
             <TextInput
-              style={styles.modalInput}
+              style={[
+                styles.modalInput,
+                {
+                  borderColor: colors.border,
+                  color: colors.textPrimary,
+                  backgroundColor: colors.surfaceAlt,
+                },
+              ]}
               placeholder="Enter monthly limit (0 to remove)"
+              placeholderTextColor={colors.textSecondary}
               keyboardType="numeric"
               value={limitInput}
               onChangeText={setLimitInput}
               autoFocus
             />
             <View style={styles.modalActions}>
-              <TouchableOpacity
-                style={[styles.modalBtn, { backgroundColor: "#6b7280" }]}
+              <Pressable
+                style={({ pressed }) => [
+                  styles.modalBtn,
+                  {
+                    backgroundColor: colors.surfaceAlt,
+                    borderWidth: 1,
+                    borderColor: colors.border,
+                    transform: [{ scale: pressed ? 0.97 : 1 }],
+                  },
+                ]}
                 onPress={() => setModalVisible(false)}
               >
-                <Text style={styles.modalBtnText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.modalBtn, { backgroundColor: "#0d9488" }]}
+                <Text style={[typography.body, { color: colors.textPrimary }]}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                style={({ pressed }) => [
+                  styles.modalBtn,
+                  {
+                    backgroundColor: colors.accent,
+                    transform: [{ scale: pressed ? 0.97 : 1 }],
+                  },
+                ]}
                 onPress={handleSaveLimit}
               >
-                <Text style={styles.modalBtnText}>Save</Text>
-              </TouchableOpacity>
+                <Text style={[typography.body, { color: "#fff" }]}>Save</Text>
+              </Pressable>
             </View>
           </View>
         </View>
@@ -283,51 +372,35 @@ export function BudgetScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#fff" },
   centered: { flex: 1, justifyContent: "center", alignItems: "center" },
-  content: { padding: 16, paddingBottom: 40 },
-  groupTitle: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: "#1f2937",
-    marginTop: 16,
-    marginBottom: 8,
-  },
   row: {
-    backgroundColor: "#f9fafb",
-    borderRadius: 10,
+    borderRadius: 12,
+    borderWidth: 1,
     padding: 14,
-    marginBottom: 8,
+    marginBottom: 10,
   },
   rowHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 6,
+    marginBottom: 8,
   },
-  catLabel: { fontSize: 14, fontWeight: "600", color: "#1f2937" },
-  pctText: { fontSize: 14, fontWeight: "700" },
-  setLimitText: { fontSize: 13, color: "#0d9488", fontWeight: "600" },
   progressBg: {
     height: 8,
     borderRadius: 4,
-    backgroundColor: "#e5e7eb",
-    marginBottom: 4,
+    marginBottom: 6,
+    overflow: "hidden",
   },
   progressFill: {
     height: 8,
     borderRadius: 4,
   },
-  amountText: { fontSize: 12, color: "#6b7280" },
-  spentOnlyText: { fontSize: 12, color: "#6b7280" },
   clearBtn: {
     alignItems: "center",
     marginTop: 24,
     padding: 14,
-    backgroundColor: "#fef2f2",
-    borderRadius: 10,
+    borderRadius: radii.sm,
   },
-  clearBtnText: { color: "#ef4444", fontWeight: "600", fontSize: 14 },
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.5)",
@@ -335,26 +408,18 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   modalContent: {
-    backgroundColor: "#fff",
     borderRadius: 16,
+    borderWidth: 1,
     padding: 24,
     width: "85%",
   },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: "#1f2937",
-    marginBottom: 16,
-  },
   modalInput: {
     borderWidth: 1,
-    borderColor: "#d1d5db",
-    borderRadius: 8,
+    borderRadius: 12,
     padding: 12,
     fontSize: 16,
     marginBottom: 16,
   },
   modalActions: { flexDirection: "row", justifyContent: "flex-end", gap: 8 },
-  modalBtn: { paddingHorizontal: 20, paddingVertical: 10, borderRadius: 8 },
-  modalBtnText: { color: "#fff", fontWeight: "600" },
+  modalBtn: { paddingHorizontal: 20, paddingVertical: 10, borderRadius: 100 },
 });

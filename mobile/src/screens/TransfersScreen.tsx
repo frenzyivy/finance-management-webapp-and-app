@@ -6,17 +6,26 @@ import {
   FlatList,
   RefreshControl,
   ActivityIndicator,
-  TouchableOpacity,
+  Pressable,
   Alert,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
+import Svg, { Path } from "react-native-svg";
 import { supabase } from "../lib/supabase";
 import { useSyncStore } from "../lib/sync-store";
-import { formatCurrency, formatDate } from "../lib/format";
+import { formatDate } from "../lib/format";
+import { useTheme } from "../lib/theme-context";
+import { text as typography, fonts } from "../lib/typography";
+import { radii, navHeight } from "../lib/radii";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { PageHeader } from "../components/PageHeader";
+import { formatINR, TransactionCard } from "../components/komal";
 import type { PersonalBusinessTransfer } from "../types/business";
 
 export function TransfersScreen() {
   const navigation = useNavigation<any>();
+  const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
   const syncVersion = useSyncStore((s) => s.syncVersion);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -75,7 +84,7 @@ export function TransfersScreen() {
   const handleLongPress = (t: PersonalBusinessTransfer) => {
     Alert.alert(
       t.reason,
-      `${formatCurrency(t.amount)} • ${formatDate(t.date)}`,
+      `${formatINR(t.amount)} • ${formatDate(t.date)}`,
       [
         { text: "Cancel", style: "cancel" },
         {
@@ -100,37 +109,70 @@ export function TransfersScreen() {
 
   const renderItem = ({ item }: { item: PersonalBusinessTransfer }) => {
     const isP2B = item.direction === "personal_to_business";
+    const tone = isP2B ? colors.expense : colors.income;
     return (
-      <TouchableOpacity
-        style={styles.entryRow}
+      <Pressable
         onLongPress={() => handleLongPress(item)}
-        activeOpacity={0.7}
+        style={({ pressed }) => [
+          styles.entryRow,
+          {
+            backgroundColor: colors.surface,
+            borderColor: colors.border,
+            transform: [{ scale: pressed ? 0.97 : 1 }],
+          },
+        ]}
       >
         <View
           style={[
             styles.iconCircle,
-            { backgroundColor: isP2B ? "#dbeafe" : "#d1fae5" },
+            {
+              backgroundColor: isP2B ? colors.expenseLight : colors.incomeLight,
+            },
           ]}
         >
-          <Text style={[styles.iconText, { color: isP2B ? "#1d4ed8" : "#059669" }]}>
+          <Text
+            style={{
+              fontSize: 18,
+              fontFamily: fonts.sansBold,
+              color: tone,
+            }}
+          >
             {isP2B ? "→" : "←"}
           </Text>
         </View>
         <View style={styles.entryLeft}>
-          <Text style={styles.entryReason} numberOfLines={1}>{item.reason}</Text>
-          <Text style={styles.entryMeta}>
-            {formatDate(item.date)} • {isP2B ? "Personal → Business" : "Business → Personal"}
+          <Text
+            numberOfLines={1}
+            style={{
+              fontFamily: fonts.sansSemibold,
+              fontSize: 14,
+              color: colors.textPrimary,
+              marginBottom: 2,
+            }}
+          >
+            {item.reason}
+          </Text>
+          <Text
+            style={{
+              fontFamily: fonts.sans,
+              fontSize: 11,
+              color: colors.textTertiary,
+            }}
+          >
+            {formatDate(item.date)} •{" "}
+            {isP2B ? "Personal → Business" : "Business → Personal"}
           </Text>
         </View>
         <Text
-          style={[
-            styles.entryAmount,
-            { color: isP2B ? "#1d4ed8" : "#059669" },
-          ]}
+          style={{
+            fontFamily: fonts.sansSemibold,
+            fontSize: 15,
+            color: tone,
+          }}
         >
-          {formatCurrency(item.amount)}
+          {formatINR(item.amount)}
         </Text>
-      </TouchableOpacity>
+      </Pressable>
     );
   };
 
@@ -138,28 +180,116 @@ export function TransfersScreen() {
 
   if (loading) {
     return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#185FA5" />
+      <View style={[styles.centered, { backgroundColor: colors.bg }]}>
+        <ActivityIndicator size="large" color={colors.accent} />
       </View>
     );
   }
 
   return (
-    <View style={styles.screen}>
+    <View style={{ flex: 1, backgroundColor: colors.bg }}>
+      <PageHeader
+        title="Transfers"
+        actions={
+          <Pressable
+            onPress={() => navigation.navigate("AddTransfer")}
+            style={({ pressed }) => [
+              styles.iconBtn,
+              {
+                backgroundColor: colors.surface,
+                borderColor: colors.border,
+                transform: [{ scale: pressed ? 0.94 : 1 }],
+              },
+            ]}
+          >
+            <Svg
+              width={18}
+              height={18}
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke={colors.textPrimary}
+              strokeWidth={1.8}
+              strokeLinecap="round"
+            >
+              <Path d="M12 5v14M5 12h14" />
+            </Svg>
+          </Pressable>
+        }
+      />
+
       {/* Summary Bar */}
-      <View style={styles.summaryBar}>
+      <View
+        style={{
+          marginHorizontal: 24,
+          marginBottom: 16,
+          backgroundColor: colors.surface,
+          borderColor: colors.border,
+          borderWidth: 1,
+          borderRadius: 12,
+          padding: 14,
+          flexDirection: "row",
+          justifyContent: "space-between",
+        }}
+      >
         <View style={styles.summaryCol}>
-          <Text style={styles.summaryLabel}>To Business</Text>
-          <Text style={styles.summaryAmount}>{formatCurrency(personalToBusiness)}</Text>
+          <Text
+            style={[
+              typography.pillLabel,
+              { color: colors.textSecondary },
+            ]}
+          >
+            To Business
+          </Text>
+          <Text
+            style={{
+              fontFamily: fonts.sansSemibold,
+              fontSize: 15,
+              color: colors.expense,
+              marginTop: 4,
+            }}
+          >
+            {formatINR(personalToBusiness)}
+          </Text>
         </View>
         <View style={styles.summaryCol}>
-          <Text style={styles.summaryLabel}>To Personal</Text>
-          <Text style={styles.summaryAmount}>{formatCurrency(businessToPersonal)}</Text>
+          <Text
+            style={[
+              typography.pillLabel,
+              { color: colors.textSecondary },
+            ]}
+          >
+            To Personal
+          </Text>
+          <Text
+            style={{
+              fontFamily: fonts.sansSemibold,
+              fontSize: 15,
+              color: colors.income,
+              marginTop: 4,
+            }}
+          >
+            {formatINR(businessToPersonal)}
+          </Text>
         </View>
         <View style={styles.summaryCol}>
-          <Text style={styles.summaryLabel}>Net</Text>
-          <Text style={[styles.summaryAmount, { color: netFlow >= 0 ? "#a7f3d0" : "#fecaca" }]}>
-            {netFlow >= 0 ? "+" : ""}{formatCurrency(netFlow)}
+          <Text
+            style={[
+              typography.pillLabel,
+              { color: colors.textSecondary },
+            ]}
+          >
+            Net
+          </Text>
+          <Text
+            style={{
+              fontFamily: fonts.sansSemibold,
+              fontSize: 15,
+              color: netFlow >= 0 ? colors.income : colors.expense,
+              marginTop: 4,
+            }}
+          >
+            {netFlow >= 0 ? "+" : ""}
+            {formatINR(netFlow)}
           </Text>
         </View>
       </View>
@@ -168,51 +298,63 @@ export function TransfersScreen() {
         data={entries}
         keyExtractor={(item) => item.id}
         renderItem={renderItem}
-        contentContainerStyle={styles.listContent}
+        contentContainerStyle={{
+          paddingBottom: navHeight + 40 + insets.bottom,
+          paddingHorizontal: 24,
+        }}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#185FA5" />
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={colors.accent}
+          />
         }
         ListEmptyComponent={
           <View style={styles.emptyState}>
-            <Text style={styles.emptyText}>No transfers yet.</Text>
-            <Text style={styles.emptyHint}>
+            <Text
+              style={[
+                typography.body,
+                { color: colors.textSecondary, marginBottom: 4 },
+              ]}
+            >
+              No transfers yet.
+            </Text>
+            <Text
+              style={[
+                typography.captionRegular,
+                { color: colors.textTertiary, textAlign: "center" },
+              ]}
+            >
               Tap + to log a transfer between personal and business.
             </Text>
           </View>
         }
       />
-
-      <TouchableOpacity
-        style={styles.fab}
-        onPress={() => navigation.navigate("AddTransfer")}
-        activeOpacity={0.8}
-      >
-        <Text style={styles.fabText}>+</Text>
-      </TouchableOpacity>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: "#fff" },
-  centered: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#fff" },
-  summaryBar: {
-    backgroundColor: "#185FA5",
-    paddingVertical: 14,
-    paddingHorizontal: 12,
-    flexDirection: "row",
-    justifyContent: "space-between",
+  centered: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  iconBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 100,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
   },
   summaryCol: { flex: 1, alignItems: "center" },
-  summaryLabel: { color: "rgba(255,255,255,0.8)", fontSize: 11, fontWeight: "500" },
-  summaryAmount: { color: "#fff", fontSize: 15, fontWeight: "700", marginTop: 2 },
-  listContent: { padding: 16, paddingBottom: 100 },
   entryRow: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#f9fafb",
     borderRadius: 12,
-    padding: 12,
+    borderWidth: 1,
+    padding: 14,
     marginBottom: 10,
   },
   iconCircle: {
@@ -221,27 +363,8 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     alignItems: "center",
     justifyContent: "center",
-    marginRight: 10,
+    marginRight: 12,
   },
-  iconText: { fontSize: 18, fontWeight: "700" },
   entryLeft: { flex: 1, marginRight: 8 },
-  entryReason: { fontSize: 14, fontWeight: "600", color: "#1f2937", marginBottom: 2 },
-  entryMeta: { fontSize: 11, color: "#6b7280" },
-  entryAmount: { fontSize: 15, fontWeight: "700" },
   emptyState: { alignItems: "center", paddingVertical: 48 },
-  emptyText: { fontSize: 15, color: "#6b7280", marginBottom: 4 },
-  emptyHint: { fontSize: 13, color: "#9ca3af", textAlign: "center" },
-  fab: {
-    position: "absolute",
-    bottom: 24,
-    right: 24,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: "#185FA5",
-    justifyContent: "center",
-    alignItems: "center",
-    elevation: 6,
-  },
-  fabText: { fontSize: 28, color: "#fff", fontWeight: "300", marginTop: -2 },
 });

@@ -4,23 +4,20 @@ import {
   Text,
   StyleSheet,
   ScrollView,
-  TouchableOpacity,
+  Pressable,
   Alert,
   ActivityIndicator,
   Switch,
-  TextInput,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { formatDistanceToNow } from "date-fns";
 import { supabase } from "../lib/supabase";
 import { useSyncStore } from "../lib/sync-store";
 import { useTheme } from "../lib/theme-context";
-
-const STATUS_COLORS: Record<string, string> = {
-  connected: "#22c55e",
-  connecting: "#f59e0b",
-  disconnected: "#f87171",
-};
+import { text as typography } from "../lib/typography";
+import { radii, navHeight } from "../lib/radii";
+import { PageHeader } from "../components/PageHeader";
 
 const STATUS_LABELS: Record<string, string> = {
   connected: "Connected",
@@ -30,7 +27,8 @@ const STATUS_LABELS: Record<string, string> = {
 
 export function SettingsScreen() {
   const navigation = useNavigation<any>();
-  const { isDark, toggleTheme } = useTheme();
+  const { isDark, colors, toggleTheme } = useTheme();
+  const insets = useSafeAreaInsets();
   const [userEmail, setUserEmail] = useState("");
   const [userName, setUserName] = useState("");
   const [loading, setLoading] = useState(true);
@@ -42,6 +40,12 @@ export function SettingsScreen() {
   const [reminderDays, setReminderDays] = useState(5);
   const [notifPrefsLoaded, setNotifPrefsLoaded] = useState(false);
   const [hasNotifRow, setHasNotifRow] = useState(false);
+
+  const STATUS_COLORS: Record<string, string> = {
+    connected: colors.income,
+    connecting: colors.warning,
+    disconnected: colors.expense,
+  };
 
   useEffect(() => {
     loadProfile();
@@ -290,244 +294,428 @@ export function SettingsScreen() {
 
   if (loading) {
     return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#0d9488" />
+      <View style={[styles.centered, { backgroundColor: colors.bg }]}>
+        <ActivityIndicator size="large" color={colors.accent} />
       </View>
     );
   }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      {/* Profile Section */}
-      <Text style={styles.sectionHeader}>Profile</Text>
-      <View style={styles.card}>
-        <View style={styles.profileRow}>
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText}>
-              {(userName || userEmail || "U").charAt(0).toUpperCase()}
-            </Text>
-          </View>
-          <View style={styles.profileInfo}>
-            <Text style={styles.profileName}>{userName || "User"}</Text>
-            <Text style={styles.profileEmail}>{userEmail}</Text>
-            <Text style={styles.profileCurrency}>Currency: INR</Text>
-          </View>
-        </View>
-      </View>
-
-      {/* Sync Section */}
-      <Text style={styles.sectionHeader}>Sync</Text>
-      <View style={styles.card}>
-        <View style={styles.syncRow}>
-          <View
-            style={[
-              styles.syncDot,
-              { backgroundColor: STATUS_COLORS[connectionStatus] },
-            ]}
-          />
-          <View style={styles.syncInfo}>
-            <Text style={styles.syncStatusText}>
-              {STATUS_LABELS[connectionStatus]}
-            </Text>
-            <Text style={styles.syncTimeText}>
-              Last synced: {syncTimeText}
-            </Text>
-          </View>
-        </View>
-        <View style={styles.divider} />
-        <TouchableOpacity
+    <View style={{ flex: 1, backgroundColor: colors.bg }}>
+      <PageHeader title="Settings" eyebrow="Preferences & account" />
+      <ScrollView
+        contentContainerStyle={{
+          paddingBottom: navHeight + 40 + insets.bottom,
+          paddingHorizontal: 24,
+        }}
+      >
+        {/* Profile Section */}
+        <Text
           style={[
-            styles.syncBtn,
-            lastSyncedAt &&
-              Date.now() - lastSyncedAt.getTime() > 3_600_000 && {
-                backgroundColor: "#f59e0b",
-              },
+            typography.pillLabel,
+            { color: colors.textSecondary, marginTop: 8, marginBottom: 8 },
           ]}
-          onPress={syncNow}
         >
-          <Text style={styles.syncBtnText}>Sync Now</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Preferences Section */}
-      <Text style={styles.sectionHeader}>Preferences</Text>
-      <View style={styles.card}>
-        <TouchableOpacity
-          style={styles.actionItem}
-          onPress={() => navigation.navigate("CreditCards")}
+          PROFILE
+        </Text>
+        <View
+          style={[
+            styles.card,
+            { backgroundColor: colors.surface, borderColor: colors.border },
+          ]}
         >
-          <Text style={styles.actionIcon}>💳</Text>
-          <Text style={styles.actionText}>Credit Cards</Text>
-        </TouchableOpacity>
-        <View style={styles.divider} />
-        <View style={styles.actionItem}>
-          <Text style={styles.actionIcon}>🌙</Text>
-          <Text style={[styles.actionText, { flex: 1 }]}>Dark Mode</Text>
-          <Switch
-            value={isDark}
-            onValueChange={toggleTheme}
-            trackColor={{ false: "#d1d5db", true: "#99f6e4" }}
-            thumbColor={isDark ? "#0d9488" : "#f4f4f5"}
-          />
-        </View>
-      </View>
-
-      {/* Notifications Section */}
-      <Text style={styles.sectionHeader}>Notifications</Text>
-      <View style={styles.card}>
-        <View style={styles.actionItem}>
-          <Text style={styles.actionIcon}>🔔</Text>
-          <Text style={[styles.actionText, { flex: 1 }]}>Payment Reminders</Text>
-          <Switch
-            value={remindersEnabled}
-            onValueChange={(val) => {
-              setRemindersEnabled(val);
-              saveNotifPreference(val, reminderDays);
-            }}
-            trackColor={{ false: "#d1d5db", true: "#99f6e4" }}
-            thumbColor={remindersEnabled ? "#0d9488" : "#f4f4f5"}
-          />
-        </View>
-        <View style={styles.divider} />
-        <View style={styles.actionItem}>
-          <Text style={styles.actionIcon}>📅</Text>
-          <Text style={[styles.actionText, { flex: 1 }]}>Remind before (days)</Text>
-          <View style={notifStyles.daysInput}>
-            <TouchableOpacity
-              style={notifStyles.daysBtn}
-              disabled={!remindersEnabled || reminderDays <= 1}
-              onPress={() => {
-                const newDays = Math.max(1, reminderDays - 1);
-                setReminderDays(newDays);
-                saveNotifPreference(remindersEnabled, newDays);
-              }}
-            >
-              <Text style={notifStyles.daysBtnText}>-</Text>
-            </TouchableOpacity>
-            <Text style={[notifStyles.daysValue, !remindersEnabled && { color: "#9ca3af" }]}>
-              {reminderDays}
-            </Text>
-            <TouchableOpacity
-              style={notifStyles.daysBtn}
-              disabled={!remindersEnabled || reminderDays >= 30}
-              onPress={() => {
-                const newDays = Math.min(30, reminderDays + 1);
-                setReminderDays(newDays);
-                saveNotifPreference(remindersEnabled, newDays);
-              }}
-            >
-              <Text style={notifStyles.daysBtnText}>+</Text>
-            </TouchableOpacity>
+          <View style={styles.profileRow}>
+            <View style={[styles.avatar, { backgroundColor: colors.accent }]}>
+              <Text style={[styles.avatarText, { color: colors.surface }]}>
+                {(userName || userEmail || "U").charAt(0).toUpperCase()}
+              </Text>
+            </View>
+            <View style={styles.profileInfo}>
+              <Text
+                style={[
+                  typography.sectionTitle,
+                  { color: colors.textPrimary },
+                ]}
+              >
+                {userName || "User"}
+              </Text>
+              <Text
+                style={[
+                  typography.caption,
+                  { color: colors.textSecondary, marginTop: 2 },
+                ]}
+              >
+                {userEmail}
+              </Text>
+              <Text
+                style={[
+                  typography.captionRegular,
+                  { color: colors.textSecondary, marginTop: 2 },
+                ]}
+              >
+                Currency: INR
+              </Text>
+            </View>
           </View>
         </View>
-        <Text style={notifStyles.hint}>
-          You'll see reminders for EMI payments due within {reminderDays} day{reminderDays === 1 ? "" : "s"}.
-        </Text>
-      </View>
 
-      {/* Actions Section */}
-      <Text style={styles.sectionHeader}>Actions</Text>
-      <View style={styles.card}>
-        <TouchableOpacity
-          style={styles.actionItem}
-          onPress={async () => {
-            try {
-              const { data, error } = await supabase.rpc("generate_recurring_entries");
-              if (error) throw error;
-              const count = (data as any)?.entries_created ?? 0;
-              if (count > 0) {
-                Alert.alert("Done", `${count} recurring ${count === 1 ? "entry" : "entries"} generated`);
-              } else {
-                Alert.alert("All caught up", "No recurring entries due today");
-              }
-            } catch (err: any) {
-              Alert.alert("Error", err.message || "Failed to generate recurring entries");
-            }
-          }}
+        {/* Sync Section */}
+        <Text
+          style={[
+            typography.pillLabel,
+            { color: colors.textSecondary, marginTop: 24, marginBottom: 8 },
+          ]}
         >
-          <Text style={styles.actionIcon}>🔄</Text>
-          <Text style={styles.actionText}>Generate Recurring Entries</Text>
-        </TouchableOpacity>
-        <View style={styles.divider} />
-        <TouchableOpacity style={styles.actionItem} onPress={handleExportData}>
-          <Text style={styles.actionIcon}>📊</Text>
-          <Text style={styles.actionText}>Export Data</Text>
-        </TouchableOpacity>
-        <View style={styles.divider} />
-        <TouchableOpacity style={styles.actionItem} onPress={handleChangePassword}>
-          <Text style={styles.actionIcon}>🔑</Text>
-          <Text style={styles.actionText}>Change Password</Text>
-        </TouchableOpacity>
-        <View style={styles.divider} />
-        <TouchableOpacity style={styles.actionItem} onPress={handleLogout}>
-          <Text style={styles.actionIcon}>🚪</Text>
-          <Text style={styles.actionText}>Log Out</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Danger Zone */}
-      <Text style={[styles.sectionHeader, { color: "#f87171" }]}>Danger Zone</Text>
-      <View style={[styles.card, { borderColor: "#fca5a5", borderWidth: 1 }]}>
-        <Text style={styles.dangerDesc}>
-          Permanently delete your account and all associated data. This cannot be undone.
+          SYNC
         </Text>
-        <TouchableOpacity style={styles.deleteBtn} onPress={handleDeleteAccount}>
-          <Text style={styles.deleteBtnText}>Delete Account</Text>
-        </TouchableOpacity>
-      </View>
+        <View
+          style={[
+            styles.card,
+            { backgroundColor: colors.surface, borderColor: colors.border },
+          ]}
+        >
+          <View style={styles.syncRow}>
+            <View
+              style={[
+                styles.syncDot,
+                { backgroundColor: STATUS_COLORS[connectionStatus] },
+              ]}
+            />
+            <View style={styles.syncInfo}>
+              <Text
+                style={[typography.body, { color: colors.textPrimary, fontWeight: "600" }]}
+              >
+                {STATUS_LABELS[connectionStatus]}
+              </Text>
+              <Text
+                style={[
+                  typography.caption,
+                  { color: colors.textSecondary, marginTop: 2 },
+                ]}
+              >
+                Last synced: {syncTimeText}
+              </Text>
+            </View>
+          </View>
+          <View style={[styles.divider, { backgroundColor: colors.border }]} />
+          <Pressable
+            style={({ pressed }) => [
+              styles.syncBtn,
+              {
+                backgroundColor:
+                  lastSyncedAt &&
+                  Date.now() - lastSyncedAt.getTime() > 3_600_000
+                    ? colors.warning
+                    : colors.accent,
+                transform: [{ scale: pressed ? 0.97 : 1 }],
+              },
+            ]}
+            onPress={syncNow}
+          >
+            <Text style={[typography.body, { color: colors.surface, fontWeight: "700" }]}>
+              Sync Now
+            </Text>
+          </Pressable>
+        </View>
 
-      <View style={{ height: 40 }} />
-    </ScrollView>
+        {/* Preferences Section */}
+        <Text
+          style={[
+            typography.pillLabel,
+            { color: colors.textSecondary, marginTop: 24, marginBottom: 8 },
+          ]}
+        >
+          PREFERENCES
+        </Text>
+        <View
+          style={[
+            styles.card,
+            { backgroundColor: colors.surface, borderColor: colors.border },
+          ]}
+        >
+          <Pressable
+            style={styles.actionItem}
+            onPress={() => navigation.navigate("CreditCards")}
+          >
+            <Text style={styles.actionIcon}>💳</Text>
+            <Text style={[typography.body, { color: colors.textPrimary, fontSize: 16 }]}>
+              Credit Cards
+            </Text>
+          </Pressable>
+          <View style={[styles.divider, { backgroundColor: colors.border }]} />
+          <View style={styles.actionItem}>
+            <Text style={styles.actionIcon}>🌙</Text>
+            <Text
+              style={[
+                typography.body,
+                { color: colors.textPrimary, fontSize: 16, flex: 1 },
+              ]}
+            >
+              Dark Mode
+            </Text>
+            <Switch
+              value={isDark}
+              onValueChange={toggleTheme}
+              trackColor={{ false: colors.border, true: colors.accentLight }}
+              thumbColor={isDark ? colors.accent : colors.surfaceAlt}
+            />
+          </View>
+        </View>
+
+        {/* Notifications Section */}
+        <Text
+          style={[
+            typography.pillLabel,
+            { color: colors.textSecondary, marginTop: 24, marginBottom: 8 },
+          ]}
+        >
+          NOTIFICATIONS
+        </Text>
+        <View
+          style={[
+            styles.card,
+            { backgroundColor: colors.surface, borderColor: colors.border },
+          ]}
+        >
+          <View style={styles.actionItem}>
+            <Text style={styles.actionIcon}>🔔</Text>
+            <Text
+              style={[
+                typography.body,
+                { color: colors.textPrimary, fontSize: 16, flex: 1 },
+              ]}
+            >
+              Payment Reminders
+            </Text>
+            <Switch
+              value={remindersEnabled}
+              onValueChange={(val) => {
+                setRemindersEnabled(val);
+                saveNotifPreference(val, reminderDays);
+              }}
+              trackColor={{ false: colors.border, true: colors.accentLight }}
+              thumbColor={remindersEnabled ? colors.accent : colors.surfaceAlt}
+            />
+          </View>
+          <View style={[styles.divider, { backgroundColor: colors.border }]} />
+          <View style={styles.actionItem}>
+            <Text style={styles.actionIcon}>📅</Text>
+            <Text
+              style={[
+                typography.body,
+                { color: colors.textPrimary, fontSize: 16, flex: 1 },
+              ]}
+            >
+              Remind before (days)
+            </Text>
+            <View
+              style={[
+                notifStyles.daysInput,
+                { backgroundColor: colors.surfaceAlt },
+              ]}
+            >
+              <Pressable
+                style={notifStyles.daysBtn}
+                disabled={!remindersEnabled || reminderDays <= 1}
+                onPress={() => {
+                  const newDays = Math.max(1, reminderDays - 1);
+                  setReminderDays(newDays);
+                  saveNotifPreference(remindersEnabled, newDays);
+                }}
+              >
+                <Text
+                  style={[
+                    notifStyles.daysBtnText,
+                    { color: colors.accent },
+                  ]}
+                >
+                  -
+                </Text>
+              </Pressable>
+              <Text
+                style={[
+                  notifStyles.daysValue,
+                  {
+                    color: remindersEnabled
+                      ? colors.textPrimary
+                      : colors.textTertiary,
+                  },
+                ]}
+              >
+                {reminderDays}
+              </Text>
+              <Pressable
+                style={notifStyles.daysBtn}
+                disabled={!remindersEnabled || reminderDays >= 30}
+                onPress={() => {
+                  const newDays = Math.min(30, reminderDays + 1);
+                  setReminderDays(newDays);
+                  saveNotifPreference(remindersEnabled, newDays);
+                }}
+              >
+                <Text
+                  style={[
+                    notifStyles.daysBtnText,
+                    { color: colors.accent },
+                  ]}
+                >
+                  +
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+          <Text
+            style={[
+              typography.captionRegular,
+              { color: colors.textTertiary, marginTop: 8 },
+            ]}
+          >
+            You'll see reminders for EMI payments due within {reminderDays} day
+            {reminderDays === 1 ? "" : "s"}.
+          </Text>
+        </View>
+
+        {/* Actions Section */}
+        <Text
+          style={[
+            typography.pillLabel,
+            { color: colors.textSecondary, marginTop: 24, marginBottom: 8 },
+          ]}
+        >
+          ACTIONS
+        </Text>
+        <View
+          style={[
+            styles.card,
+            { backgroundColor: colors.surface, borderColor: colors.border },
+          ]}
+        >
+          <Pressable
+            style={styles.actionItem}
+            onPress={async () => {
+              try {
+                const { data, error } = await supabase.rpc(
+                  "generate_recurring_entries"
+                );
+                if (error) throw error;
+                const count = (data as any)?.entries_created ?? 0;
+                if (count > 0) {
+                  Alert.alert(
+                    "Done",
+                    `${count} recurring ${count === 1 ? "entry" : "entries"} generated`
+                  );
+                } else {
+                  Alert.alert("All caught up", "No recurring entries due today");
+                }
+              } catch (err: any) {
+                Alert.alert(
+                  "Error",
+                  err.message || "Failed to generate recurring entries"
+                );
+              }
+            }}
+          >
+            <Text style={styles.actionIcon}>🔄</Text>
+            <Text style={[typography.body, { color: colors.textPrimary, fontSize: 16 }]}>
+              Generate Recurring Entries
+            </Text>
+          </Pressable>
+          <View style={[styles.divider, { backgroundColor: colors.border }]} />
+          <Pressable style={styles.actionItem} onPress={handleExportData}>
+            <Text style={styles.actionIcon}>📊</Text>
+            <Text style={[typography.body, { color: colors.textPrimary, fontSize: 16 }]}>
+              Export Data
+            </Text>
+          </Pressable>
+          <View style={[styles.divider, { backgroundColor: colors.border }]} />
+          <Pressable style={styles.actionItem} onPress={handleChangePassword}>
+            <Text style={styles.actionIcon}>🔑</Text>
+            <Text style={[typography.body, { color: colors.textPrimary, fontSize: 16 }]}>
+              Change Password
+            </Text>
+          </Pressable>
+          <View style={[styles.divider, { backgroundColor: colors.border }]} />
+          <Pressable style={styles.actionItem} onPress={handleLogout}>
+            <Text style={styles.actionIcon}>🚪</Text>
+            <Text style={[typography.body, { color: colors.textPrimary, fontSize: 16 }]}>
+              Log Out
+            </Text>
+          </Pressable>
+        </View>
+
+        {/* Danger Zone */}
+        <Text
+          style={[
+            typography.pillLabel,
+            { color: colors.expense, marginTop: 24, marginBottom: 8 },
+          ]}
+        >
+          DANGER ZONE
+        </Text>
+        <View
+          style={[
+            styles.card,
+            {
+              backgroundColor: colors.surface,
+              borderColor: colors.expense,
+              borderWidth: 1,
+            },
+          ]}
+        >
+          <Text
+            style={[
+              typography.caption,
+              { color: colors.textSecondary, marginBottom: 12 },
+            ]}
+          >
+            Permanently delete your account and all associated data. This cannot
+            be undone.
+          </Text>
+          <Pressable
+            style={({ pressed }) => [
+              styles.deleteBtn,
+              {
+                backgroundColor: colors.expense,
+                transform: [{ scale: pressed ? 0.97 : 1 }],
+              },
+            ]}
+            onPress={handleDeleteAccount}
+          >
+            <Text style={[typography.body, { color: colors.surface, fontWeight: "700" }]}>
+              Delete Account
+            </Text>
+          </Pressable>
+        </View>
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#fff" },
-  content: { padding: 16 },
   centered: { flex: 1, justifyContent: "center", alignItems: "center" },
-  sectionHeader: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: "#6b7280",
-    textTransform: "uppercase",
-    letterSpacing: 1,
-    marginTop: 24,
-    marginBottom: 8,
-    marginLeft: 4,
-  },
   card: {
-    backgroundColor: "#f3f4f6",
-    borderRadius: 12,
+    borderRadius: radii.sm,
+    borderWidth: 1,
     padding: 16,
-    elevation: 2,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
   },
   profileRow: { flexDirection: "row", alignItems: "center" },
   avatar: {
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: "#0d9488",
     justifyContent: "center",
     alignItems: "center",
     marginRight: 16,
   },
-  avatarText: { color: "#fff", fontSize: 24, fontWeight: "bold" },
+  avatarText: { fontSize: 24, fontWeight: "bold" },
   profileInfo: { flex: 1 },
-  profileName: { fontSize: 18, fontWeight: "bold", color: "#1f2937" },
-  profileEmail: { fontSize: 14, color: "#6b7280", marginTop: 2 },
-  profileCurrency: { fontSize: 13, color: "#6b7280", marginTop: 2 },
   actionItem: {
     flexDirection: "row",
     alignItems: "center",
     paddingVertical: 12,
   },
   actionIcon: { fontSize: 20, marginRight: 12 },
-  actionText: { fontSize: 16, color: "#1f2937" },
-  divider: { height: 1, backgroundColor: "#e5e7eb" },
+  divider: { height: 1 },
   syncRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -540,43 +728,23 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   syncInfo: { flex: 1 },
-  syncStatusText: {
-    fontSize: 15,
-    fontWeight: "600",
-    color: "#1f2937",
-  },
-  syncTimeText: {
-    fontSize: 13,
-    color: "#6b7280",
-    marginTop: 2,
-  },
   syncBtn: {
-    backgroundColor: "#0d9488",
     padding: 14,
     borderRadius: 8,
     alignItems: "center",
     marginTop: 8,
   },
-  syncBtnText: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "bold",
-  },
-  dangerDesc: { fontSize: 14, color: "#6b7280", marginBottom: 12 },
   deleteBtn: {
-    backgroundColor: "#f87171",
     padding: 14,
     borderRadius: 8,
     alignItems: "center",
   },
-  deleteBtnText: { color: "#fff", fontSize: 16, fontWeight: "bold" },
 });
 
 const notifStyles = StyleSheet.create({
   daysInput: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#e5e7eb",
     borderRadius: 8,
   },
   daysBtn: {
@@ -588,18 +756,11 @@ const notifStyles = StyleSheet.create({
   daysBtnText: {
     fontSize: 18,
     fontWeight: "700",
-    color: "#0d9488",
   },
   daysValue: {
     fontSize: 16,
     fontWeight: "700",
-    color: "#1f2937",
     minWidth: 28,
     textAlign: "center",
-  },
-  hint: {
-    fontSize: 12,
-    color: "#9ca3af",
-    marginTop: 8,
   },
 });

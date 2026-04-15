@@ -4,32 +4,40 @@ import {
   Text,
   StyleSheet,
   FlatList,
-  TouchableOpacity,
+  Pressable,
   Alert,
   ActivityIndicator,
   RefreshControl,
   TextInput,
   Modal,
-  Platform,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import Svg, { Path } from "react-native-svg";
 import { supabase } from "../lib/supabase";
 import { useSyncStore } from "../lib/sync-store";
 import { SavingsGoal } from "../types/database";
-import { formatCurrency, formatDate } from "../lib/format";
+import { formatDate } from "../lib/format";
+import { useTheme } from "../lib/theme-context";
+import { text as typography } from "../lib/typography";
+import { radii, navHeight } from "../lib/radii";
+import { PageHeader } from "../components/PageHeader";
+import { formatINR } from "../components/komal";
 
-const PRIORITY_COLORS: Record<string, string> = {
-  high: "#f87171",
-  medium: "#f59e0b",
-  low: "#22c55e",
+const PRIORITY_TONE: Record<string, "danger" | "warn" | "ok"> = {
+  high: "danger",
+  medium: "warn",
+  low: "ok",
 };
 
-const GOAL_COLORS = ["#0d9488", "#f59e0b", "#3b82f6", "#8b5cf6", "#ec4899", "#22c55e"];
+const GOAL_PALETTE = ["#0D9373", "#F5A623", "#42A5F5", "#AB47BC", "#E8453C", "#F5A623"];
 
 function getGoalColor(index: number): string {
-  return GOAL_COLORS[index % GOAL_COLORS.length];
+  return GOAL_PALETTE[index % GOAL_PALETTE.length];
 }
 
 export function GoalsScreen({ navigation }: any) {
+  const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
   const syncVersion = useSyncStore((s) => s.syncVersion);
   const [goals, setGoals] = useState<SavingsGoal[]>([]);
   const [loading, setLoading] = useState(true);
@@ -64,19 +72,6 @@ export function GoalsScreen({ navigation }: any) {
     const unsubscribe = navigation.addListener("focus", fetchGoals);
     return unsubscribe;
   }, [fetchGoals, navigation, syncVersion]);
-
-  useEffect(() => {
-    navigation.setOptions({
-      headerRight: () => (
-        <TouchableOpacity
-          onPress={() => navigation.navigate("AddGoal")}
-          style={{ marginRight: 16 }}
-        >
-          <Text style={{ color: "#fff", fontSize: 16, fontWeight: "600" }}>+ New</Text>
-        </TouchableOpacity>
-      ),
-    });
-  }, [navigation]);
 
   const onRefresh = () => {
     setRefreshing(true);
@@ -154,62 +149,114 @@ export function GoalsScreen({ navigation }: any) {
     ]);
   };
 
+  const priorityBg = (tone: "danger" | "warn" | "ok") =>
+    tone === "danger"
+      ? colors.expenseLight
+      : tone === "warn"
+      ? "rgba(245,166,35,0.18)"
+      : colors.incomeLight;
+
+  const priorityFg = (tone: "danger" | "warn" | "ok") =>
+    tone === "danger" ? colors.expense : tone === "warn" ? colors.warning : colors.income;
+
   const renderGoal = ({ item, index }: { item: SavingsGoal; index: number }) => {
     const progress = item.target_amount > 0
       ? Math.min((item.current_balance / item.target_amount) * 100, 100)
       : 0;
     const color = getGoalColor(index);
+    const tone = PRIORITY_TONE[item.priority] ?? "ok";
 
     return (
-      <View style={styles.card}>
-        <View style={[styles.colorBar, { backgroundColor: color }]} />
-        <View style={styles.cardContent}>
-          <View style={styles.cardHeader}>
-            <Text style={styles.goalName} numberOfLines={1}>{item.name}</Text>
-            <View style={styles.badgeRow}>
-              {item.status !== "active" && (
-                <View style={[styles.badge, { backgroundColor: "#6b7280" }]}>
-                  <Text style={styles.badgeText}>{item.status}</Text>
-                </View>
-              )}
-              <View style={[styles.badge, { backgroundColor: PRIORITY_COLORS[item.priority] || "#6b7280" }]}>
-                <Text style={styles.badgeText}>{item.priority}</Text>
+      <View
+        style={[
+          styles.card,
+          {
+            backgroundColor: colors.surface,
+            borderColor: colors.border,
+          },
+        ]}
+      >
+        <View style={styles.cardHeader}>
+          <Text
+            style={[typography.sectionTitle, { color: colors.textPrimary, flex: 1, marginRight: 8 }]}
+            numberOfLines={1}
+          >
+            {item.name}
+          </Text>
+          <View style={styles.badgeRow}>
+            {item.status !== "active" && (
+              <View style={[styles.badge, { backgroundColor: colors.surfaceAlt }]}>
+                <Text style={[typography.pillLabel, { color: colors.textSecondary }]}>
+                  {item.status}
+                </Text>
               </View>
+            )}
+            <View style={[styles.badge, { backgroundColor: priorityBg(tone) }]}>
+              <Text style={[typography.pillLabel, { color: priorityFg(tone) }]}>
+                {item.priority}
+              </Text>
             </View>
           </View>
+        </View>
 
-          <View style={styles.progressBarBg}>
-            <View style={[styles.progressBarFill, { width: `${progress}%`, backgroundColor: color }]} />
-          </View>
+        <View style={[styles.progressBarBg, { backgroundColor: colors.surfaceAlt }]}>
+          <View
+            style={[
+              styles.progressBarFill,
+              { width: `${progress}%`, backgroundColor: color },
+            ]}
+          />
+        </View>
 
-          <Text style={styles.progressText}>
-            {formatCurrency(item.current_balance)} / {formatCurrency(item.target_amount)} ({Math.round(progress)}%)
+        <Text style={[typography.caption, { color: colors.textPrimary, marginBottom: 4 }]}>
+          {formatINR(item.current_balance)} / {formatINR(item.target_amount)} ({Math.round(progress)}%)
+        </Text>
+
+        {item.target_date && (
+          <Text style={[typography.caption, { color: colors.textSecondary, marginBottom: 10 }]}>
+            Target: {formatDate(item.target_date)}
           </Text>
+        )}
 
-          {item.target_date && (
-            <Text style={styles.dateText}>Target: {formatDate(item.target_date)}</Text>
-          )}
-
-          <View style={styles.actionRow}>
-            <TouchableOpacity
-              style={[styles.actionBtn, { backgroundColor: color }]}
-              onPress={() => handleAddMoney(item)}
-            >
-              <Text style={styles.actionBtnText}>Add Money</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.actionBtn, { backgroundColor: "#3b82f6" }]}
-              onPress={() => navigation.navigate("AddGoal", { goal: item })}
-            >
-              <Text style={styles.actionBtnText}>Edit</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.actionBtn, { backgroundColor: "#f87171" }]}
-              onPress={() => handleDelete(item)}
-            >
-              <Text style={styles.actionBtnText}>Delete</Text>
-            </TouchableOpacity>
-          </View>
+        <View style={styles.actionRow}>
+          <Pressable
+            style={({ pressed }) => [
+              styles.actionBtn,
+              {
+                backgroundColor: colors.accent,
+                transform: [{ scale: pressed ? 0.97 : 1 }],
+              },
+            ]}
+            onPress={() => handleAddMoney(item)}
+          >
+            <Text style={[typography.caption, { color: "#fff" }]}>Add Money</Text>
+          </Pressable>
+          <Pressable
+            style={({ pressed }) => [
+              styles.actionBtn,
+              {
+                backgroundColor: colors.surfaceAlt,
+                borderWidth: 1,
+                borderColor: colors.border,
+                transform: [{ scale: pressed ? 0.97 : 1 }],
+              },
+            ]}
+            onPress={() => navigation.navigate("AddGoal", { goal: item })}
+          >
+            <Text style={[typography.caption, { color: colors.textPrimary }]}>Edit</Text>
+          </Pressable>
+          <Pressable
+            style={({ pressed }) => [
+              styles.actionBtn,
+              {
+                backgroundColor: colors.expenseLight,
+                transform: [{ scale: pressed ? 0.97 : 1 }],
+              },
+            ]}
+            onPress={() => handleDelete(item)}
+          >
+            <Text style={[typography.caption, { color: colors.expense }]}>Delete</Text>
+          </Pressable>
         </View>
       </View>
     );
@@ -217,72 +264,160 @@ export function GoalsScreen({ navigation }: any) {
 
   if (loading) {
     return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#0d9488" />
+      <View style={[styles.centered, { backgroundColor: colors.bg }]}>
+        <ActivityIndicator size="large" color={colors.accent} />
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
-      {/* Summary */}
-      <View style={styles.summary}>
-        <Text style={styles.summaryLabel}>Total Saved</Text>
-        <Text style={styles.summaryAmount}>{formatCurrency(totalSaved)}</Text>
-      </View>
-
-      {/* Goals List */}
+    <View style={{ flex: 1, backgroundColor: colors.bg }}>
       <FlatList
         data={goals}
         keyExtractor={(item) => item.id}
         renderItem={renderGoal}
-        contentContainerStyle={goals.length === 0 ? styles.centered : styles.list}
+        contentContainerStyle={{
+          paddingHorizontal: 24,
+          paddingBottom: navHeight + 40 + insets.bottom,
+        }}
+        ListHeaderComponent={
+          <>
+            <PageHeader
+              title="Savings Goals"
+              actions={
+                <Pressable
+                  onPress={() => navigation.navigate("AddGoal")}
+                  style={({ pressed }) => [
+                    styles.iconBtn,
+                    {
+                      backgroundColor: colors.surface,
+                      borderColor: colors.border,
+                      transform: [{ scale: pressed ? 0.94 : 1 }],
+                    },
+                  ]}
+                >
+                  <Svg
+                    width={18}
+                    height={18}
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke={colors.textPrimary}
+                    strokeWidth={1.8}
+                    strokeLinecap="round"
+                  >
+                    <Path d="M12 5v14M5 12h14" />
+                  </Svg>
+                </Pressable>
+              }
+            />
+
+            <View
+              style={[
+                styles.summary,
+                {
+                  backgroundColor: colors.surface,
+                  borderColor: colors.border,
+                },
+              ]}
+            >
+              <Text style={[typography.pillLabel, { color: colors.textSecondary }]}>
+                Total Saved
+              </Text>
+              <Text
+                style={[
+                  typography.heroAmount,
+                  { color: colors.textPrimary, marginTop: 6 },
+                ]}
+              >
+                {formatINR(totalSaved)}
+              </Text>
+            </View>
+          </>
+        }
         ListEmptyComponent={
           <View style={styles.empty}>
-            <Text style={styles.emptyIcon}>🎯</Text>
-            <Text style={styles.emptyTitle}>No Goals Yet</Text>
-            <Text style={styles.emptySubtitle}>Start saving towards your dreams!</Text>
+            <Text style={{ fontSize: 48, marginBottom: 12 }}>🎯</Text>
+            <Text style={[typography.sectionTitle, { color: colors.textPrimary }]}>
+              No Goals Yet
+            </Text>
+            <Text
+              style={[
+                typography.caption,
+                { color: colors.textSecondary, marginTop: 4 },
+              ]}
+            >
+              Start saving towards your dreams!
+            </Text>
           </View>
         }
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={["#0d9488"]} />
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={colors.accent}
+          />
         }
       />
 
-      {/* FAB */}
-      <TouchableOpacity
-        style={styles.fab}
-        onPress={() => navigation.navigate("AddGoal")}
-      >
-        <Text style={styles.fabText}>+</Text>
-      </TouchableOpacity>
-
-      {/* Add Money Modal */}
       <Modal visible={addMoneyModalVisible} transparent animationType="fade">
         <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Add Money to {selectedGoal?.name}</Text>
+          <View
+            style={[
+              styles.modalContent,
+              { backgroundColor: colors.surface, borderColor: colors.border },
+            ]}
+          >
+            <Text
+              style={[
+                typography.sectionTitle,
+                { color: colors.textPrimary, marginBottom: 16 },
+              ]}
+            >
+              Add Money to {selectedGoal?.name}
+            </Text>
             <TextInput
-              style={styles.modalInput}
+              style={[
+                styles.modalInput,
+                {
+                  borderColor: colors.border,
+                  color: colors.textPrimary,
+                  backgroundColor: colors.surfaceAlt,
+                },
+              ]}
               placeholder="Amount"
+              placeholderTextColor={colors.textSecondary}
               keyboardType="numeric"
               value={contributionAmount}
               onChangeText={setContributionAmount}
               autoFocus
             />
             <View style={styles.modalActions}>
-              <TouchableOpacity
-                style={[styles.modalBtn, { backgroundColor: "#6b7280" }]}
+              <Pressable
+                style={({ pressed }) => [
+                  styles.modalBtn,
+                  {
+                    backgroundColor: colors.surfaceAlt,
+                    borderWidth: 1,
+                    borderColor: colors.border,
+                    transform: [{ scale: pressed ? 0.97 : 1 }],
+                  },
+                ]}
                 onPress={() => setAddMoneyModalVisible(false)}
               >
-                <Text style={styles.modalBtnText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.modalBtn, { backgroundColor: "#0d9488" }]}
+                <Text style={[typography.body, { color: colors.textPrimary }]}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                style={({ pressed }) => [
+                  styles.modalBtn,
+                  {
+                    backgroundColor: colors.accent,
+                    transform: [{ scale: pressed ? 0.97 : 1 }],
+                  },
+                ]}
                 onPress={confirmAddMoney}
               >
-                <Text style={styles.modalBtnText}>Add</Text>
-              </TouchableOpacity>
+                <Text style={[typography.body, { color: "#fff" }]}>Add</Text>
+              </Pressable>
             </View>
           </View>
         </View>
@@ -292,84 +427,57 @@ export function GoalsScreen({ navigation }: any) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#fff" },
   centered: { flex: 1, justifyContent: "center", alignItems: "center" },
+  iconBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 100,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   summary: {
-    backgroundColor: "#0d9488",
+    borderRadius: radii.md,
+    borderWidth: 1,
     padding: 20,
     alignItems: "center",
+    marginBottom: 20,
   },
-  summaryLabel: { color: "rgba(255,255,255,0.8)", fontSize: 14 },
-  summaryAmount: { color: "#fff", fontSize: 28, fontWeight: "bold", marginTop: 4 },
-  list: { padding: 16, paddingBottom: 80 },
   card: {
-    backgroundColor: "#f3f4f6",
     borderRadius: 12,
+    borderWidth: 1,
+    padding: 14,
     marginBottom: 12,
-    elevation: 2,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    flexDirection: "row",
-    overflow: "hidden",
   },
-  colorBar: { width: 6 },
-  cardContent: { flex: 1, padding: 16 },
   cardHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     marginBottom: 10,
   },
-  goalName: { fontSize: 16, fontWeight: "bold", color: "#1f2937", flex: 1, marginRight: 8 },
   badgeRow: { flexDirection: "row", gap: 4 },
   badge: {
     paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 12,
+    paddingVertical: 3,
+    borderRadius: 100,
   },
-  badgeText: { color: "#fff", fontSize: 11, fontWeight: "600", textTransform: "capitalize" },
   progressBarBg: {
     height: 8,
     borderRadius: 4,
-    backgroundColor: "#e5e7eb",
     marginBottom: 6,
+    overflow: "hidden",
   },
   progressBarFill: {
     height: 8,
     borderRadius: 4,
   },
-  progressText: { fontSize: 13, color: "#1f2937", marginBottom: 4 },
-  dateText: { fontSize: 12, color: "#6b7280", marginBottom: 8 },
-  actionRow: { flexDirection: "row", gap: 8, marginTop: 4 },
+  actionRow: { flexDirection: "row", gap: 8, marginTop: 4, flexWrap: "wrap" },
   actionBtn: {
     paddingHorizontal: 14,
     paddingVertical: 8,
-    borderRadius: 8,
+    borderRadius: 100,
   },
-  actionBtnText: { color: "#fff", fontSize: 13, fontWeight: "600" },
   empty: { alignItems: "center", paddingTop: 60 },
-  emptyIcon: { fontSize: 48, marginBottom: 12 },
-  emptyTitle: { fontSize: 18, fontWeight: "bold", color: "#1f2937" },
-  emptySubtitle: { fontSize: 14, color: "#6b7280", marginTop: 4 },
-  fab: {
-    position: "absolute",
-    bottom: 20,
-    right: 20,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: "#0d9488",
-    justifyContent: "center",
-    alignItems: "center",
-    elevation: 4,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-  },
-  fabText: { color: "#fff", fontSize: 28, lineHeight: 30 },
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.5)",
@@ -377,21 +485,18 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   modalContent: {
-    backgroundColor: "#fff",
     borderRadius: 16,
+    borderWidth: 1,
     padding: 24,
     width: "85%",
   },
-  modalTitle: { fontSize: 18, fontWeight: "bold", color: "#1f2937", marginBottom: 16 },
   modalInput: {
     borderWidth: 1,
-    borderColor: "#d1d5db",
-    borderRadius: 8,
+    borderRadius: 12,
     padding: 12,
     fontSize: 16,
     marginBottom: 16,
   },
   modalActions: { flexDirection: "row", justifyContent: "flex-end", gap: 8 },
-  modalBtn: { paddingHorizontal: 20, paddingVertical: 10, borderRadius: 8 },
-  modalBtnText: { color: "#fff", fontWeight: "600" },
+  modalBtn: { paddingHorizontal: 20, paddingVertical: 10, borderRadius: 100 },
 });

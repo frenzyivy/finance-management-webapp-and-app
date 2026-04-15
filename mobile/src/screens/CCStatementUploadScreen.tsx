@@ -4,13 +4,18 @@ import {
   Text,
   StyleSheet,
   ScrollView,
-  TouchableOpacity,
+  Pressable,
   Alert,
   ActivityIndicator,
-  FlatList,
 } from "react-native";
 import * as DocumentPicker from "expo-document-picker";
 import { supabase } from "../lib/supabase";
+import { useTheme } from "../lib/theme-context";
+import { text as typography, fonts } from "../lib/typography";
+import { radii, navHeight } from "../lib/radii";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { PageHeader } from "../components/PageHeader";
+import { formatINR, TransactionCard } from "../components/komal";
 
 /**
  * CC Statement Upload — mobile equivalent of the web statement upload dialog.
@@ -59,25 +64,9 @@ interface PickedFile {
   size: number;
 }
 
-const formatCurrency = (amount: number) =>
-  new Intl.NumberFormat("en-IN", {
-    style: "currency",
-    currency: "INR",
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 2,
-  }).format(amount);
-
-const TRANSACTION_TYPE_COLORS: Record<string, string> = {
-  purchase: "#ef4444",
-  refund: "#22c55e",
-  fee: "#f59e0b",
-  interest: "#f59e0b",
-  payment: "#22c55e",
-  cashback: "#22c55e",
-  emi_charge: "#8b5cf6",
-};
-
 export function CCStatementUploadScreen({ navigation, route }: any) {
+  const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
   const creditCardId = route?.params?.creditCardId;
   const cardName = route?.params?.cardName || "Credit Card";
 
@@ -120,7 +109,9 @@ export function CCStatementUploadScreen({ navigation, route }: any) {
     setParsing(true);
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
       if (!session) {
         Alert.alert("Error", "Not authenticated.");
         return;
@@ -153,7 +144,10 @@ export function CCStatementUploadScreen({ navigation, route }: any) {
       // Auto-select purchases and EMI charges
       const autoSelect = new Set<number>();
       (data.transactions || []).forEach((t, i) => {
-        if (t.transaction_type === "purchase" || t.transaction_type === "emi_charge") {
+        if (
+          t.transaction_type === "purchase" ||
+          t.transaction_type === "emi_charge"
+        ) {
           autoSelect.add(i);
         }
       });
@@ -174,7 +168,9 @@ export function CCStatementUploadScreen({ navigation, route }: any) {
     setSaving(true);
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
       if (!session) {
         Alert.alert("Error", "Not authenticated.");
         return;
@@ -203,8 +199,10 @@ export function CCStatementUploadScreen({ navigation, route }: any) {
         },
         body: JSON.stringify({
           credit_card_id: creditCardId,
-          statement_date: parsedData.statement_date || new Date().toISOString().split("T")[0],
-          due_date: parsedData.due_date || new Date().toISOString().split("T")[0],
+          statement_date:
+            parsedData.statement_date || new Date().toISOString().split("T")[0],
+          due_date:
+            parsedData.due_date || new Date().toISOString().split("T")[0],
           billing_period_start: parsedData.billing_period_start,
           billing_period_end: parsedData.billing_period_end,
           total_amount_due: parsedData.total_amount_due || 0,
@@ -248,320 +246,351 @@ export function CCStatementUploadScreen({ navigation, route }: any) {
     });
   };
 
+  const cardBoxStyle = {
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 14,
+  };
+
   return (
-    <ScrollView style={styles.container}>
-      {/* Header */}
-      <Text style={styles.title}>Upload {cardName} Statement</Text>
-      <Text style={styles.subtitle}>
-        Upload your credit card statement PDF and we&apos;ll extract all transactions.
-        Nothing is stored until you approve.
-      </Text>
+    <View style={{ flex: 1, backgroundColor: colors.bg }}>
+      <PageHeader title="CC Statement" eyebrow="Upload PDF" />
+      <ScrollView
+        contentContainerStyle={{
+          paddingBottom: navHeight + 40 + insets.bottom,
+          paddingHorizontal: 24,
+        }}
+      >
+        <Text
+          style={[
+            typography.caption,
+            { color: colors.textSecondary, marginBottom: 20, lineHeight: 18 },
+          ]}
+        >
+          Upload your {cardName} statement PDF and we&apos;ll extract all
+          transactions. Nothing is stored until you approve.
+        </Text>
 
-      {/* File Picker */}
-      {!parsedData && (
-        <View style={styles.section}>
-          <TouchableOpacity style={styles.pickButton} onPress={pickFile}>
-            <Text style={styles.pickButtonText}>
-              {file ? `📄 ${file.name}` : "📂 Pick Statement PDF"}
-            </Text>
-            {file && (
-              <Text style={styles.fileSize}>
-                {(file.size / 1024).toFixed(1)} KB
-              </Text>
-            )}
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.parseButton, (!file || parsing) && styles.disabledButton]}
-            onPress={parseStatement}
-            disabled={!file || parsing}
-          >
-            {parsing ? (
-              <ActivityIndicator color="#fff" size="small" />
-            ) : (
-              <Text style={styles.parseButtonText}>✨ Parse Statement</Text>
-            )}
-          </TouchableOpacity>
-        </View>
-      )}
-
-      {/* Statement Summary */}
-      {parsedData && (
-        <View style={styles.summaryCard}>
-          <Text style={styles.summaryTitle}>Statement Summary</Text>
-
-          <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>Statement Date</Text>
-            <Text style={styles.summaryValue}>{parsedData.statement_date || "—"}</Text>
-          </View>
-          <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>Due Date</Text>
-            <Text style={styles.summaryValue}>{parsedData.due_date || "—"}</Text>
-          </View>
-          <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>Total Due</Text>
-            <Text style={[styles.summaryValue, { color: "#ef4444", fontWeight: "700" }]}>
-              {parsedData.total_amount_due != null
-                ? formatCurrency(parsedData.total_amount_due)
-                : "—"}
-            </Text>
-          </View>
-          <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>Minimum Due</Text>
-            <Text style={styles.summaryValue}>
-              {parsedData.minimum_amount_due != null
-                ? formatCurrency(parsedData.minimum_amount_due)
-                : "—"}
-            </Text>
-          </View>
-          {parsedData.credit_limit != null && (
-            <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Credit Limit</Text>
-              <Text style={styles.summaryValue}>
-                {formatCurrency(parsedData.credit_limit)}
-              </Text>
-            </View>
-          )}
-          {(parsedData.interest_charged ?? 0) > 0 && (
-            <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Interest</Text>
-              <Text style={[styles.summaryValue, { color: "#ef4444" }]}>
-                {formatCurrency(parsedData.interest_charged!)}
-              </Text>
-            </View>
-          )}
-        </View>
-      )}
-
-      {/* Transactions */}
-      {parsedData && (parsedData.transactions || []).length > 0 && (
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>
-            Transactions ({parsedData.transactions.length})
-          </Text>
-
-          {parsedData.transactions.map((txn, index) => (
-            <TouchableOpacity
-              key={index}
-              style={[
-                styles.txnRow,
-                selectedTxns.has(index) && styles.txnRowSelected,
+        {/* File Picker */}
+        {!parsedData && (
+          <View style={{ marginBottom: 16 }}>
+            <Pressable
+              onPress={pickFile}
+              style={({ pressed }) => [
+                {
+                  backgroundColor: colors.surface,
+                  borderWidth: 1,
+                  borderStyle: "dashed",
+                  borderColor: colors.border,
+                  borderRadius: 12,
+                  paddingVertical: 24,
+                  paddingHorizontal: 16,
+                  alignItems: "center",
+                  marginBottom: 12,
+                  transform: [{ scale: pressed ? 0.97 : 1 }],
+                },
               ]}
-              onPress={() => toggleTxn(index)}
             >
-              <View style={styles.txnLeft}>
-                <View style={styles.txnHeader}>
-                  <View
-                    style={[
-                      styles.typeBadge,
-                      {
-                        backgroundColor:
-                          (TRANSACTION_TYPE_COLORS[txn.transaction_type] || "#6b7280") + "20",
-                      },
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.typeBadgeText,
-                        {
-                          color: TRANSACTION_TYPE_COLORS[txn.transaction_type] || "#6b7280",
-                        },
-                      ]}
-                    >
-                      {txn.transaction_type.toUpperCase()}
-                    </Text>
-                  </View>
-                  <Text style={styles.txnMerchant} numberOfLines={1}>
-                    {txn.merchant_name || txn.description || "Unknown"}
-                  </Text>
-                </View>
-                <Text style={styles.txnDate}>{txn.transaction_date}</Text>
-              </View>
               <Text
                 style={[
-                  styles.txnAmount,
-                  { color: (txn.amount || 0) < 0 ? "#22c55e" : "#ef4444" },
+                  typography.body,
+                  { color: colors.textSecondary },
                 ]}
               >
-                {txn.amount != null
-                  ? formatCurrency(Math.abs(txn.amount))
-                  : "—"}
+                {file ? `📄 ${file.name}` : "📂 Pick Statement PDF"}
               </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-      )}
+              {file && (
+                <Text
+                  style={[
+                    typography.captionRegular,
+                    { color: colors.textTertiary, marginTop: 4 },
+                  ]}
+                >
+                  {(file.size / 1024).toFixed(1)} KB
+                </Text>
+              )}
+            </Pressable>
 
-      {/* Save Button */}
-      {parsedData && (
-        <View style={styles.section}>
-          <TouchableOpacity
-            style={[styles.saveButton, saving && styles.disabledButton]}
+            <Pressable
+              onPress={parseStatement}
+              disabled={!file || parsing}
+              style={({ pressed }) => [
+                {
+                  backgroundColor: colors.accent,
+                  borderRadius: 100,
+                  paddingVertical: 14,
+                  alignItems: "center",
+                  opacity: !file || parsing ? 0.5 : 1,
+                  transform: [{ scale: pressed ? 0.97 : 1 }],
+                },
+              ]}
+            >
+              {parsing ? (
+                <ActivityIndicator color="#fff" size="small" />
+              ) : (
+                <Text
+                  style={{
+                    color: "#fff",
+                    fontFamily: fonts.sansSemibold,
+                    fontSize: 15,
+                  }}
+                >
+                  ✨ Parse Statement
+                </Text>
+              )}
+            </Pressable>
+          </View>
+        )}
+
+        {/* Statement Summary */}
+        {parsedData && (
+          <View style={[cardBoxStyle, { marginBottom: 16 }]}>
+            <Text
+              style={[
+                typography.sectionTitle,
+                { color: colors.textPrimary, marginBottom: 10 },
+              ]}
+            >
+              Statement Summary
+            </Text>
+
+            <SummaryRow
+              label="Statement Date"
+              value={parsedData.statement_date || "—"}
+              colors={colors}
+            />
+            <SummaryRow
+              label="Due Date"
+              value={parsedData.due_date || "—"}
+              colors={colors}
+            />
+            <SummaryRow
+              label="Total Due"
+              value={
+                parsedData.total_amount_due != null
+                  ? formatINR(parsedData.total_amount_due)
+                  : "—"
+              }
+              valueColor={colors.expense}
+              bold
+              colors={colors}
+            />
+            <SummaryRow
+              label="Minimum Due"
+              value={
+                parsedData.minimum_amount_due != null
+                  ? formatINR(parsedData.minimum_amount_due)
+                  : "—"
+              }
+              colors={colors}
+            />
+            {parsedData.credit_limit != null && (
+              <SummaryRow
+                label="Credit Limit"
+                value={formatINR(parsedData.credit_limit)}
+                colors={colors}
+              />
+            )}
+            {(parsedData.interest_charged ?? 0) > 0 && (
+              <SummaryRow
+                label="Interest"
+                value={formatINR(parsedData.interest_charged!)}
+                valueColor={colors.expense}
+                colors={colors}
+              />
+            )}
+          </View>
+        )}
+
+        {/* Transactions */}
+        {parsedData && (parsedData.transactions || []).length > 0 && (
+          <View style={{ marginBottom: 16 }}>
+            <Text
+              style={[
+                typography.sectionTitle,
+                { color: colors.textPrimary, marginBottom: 10 },
+              ]}
+            >
+              Transactions ({parsedData.transactions.length})
+            </Text>
+
+            {parsedData.transactions.map((txn, index) => {
+              const selected = selectedTxns.has(index);
+              const isCredit =
+                txn.transaction_type === "payment" ||
+                txn.transaction_type === "refund" ||
+                txn.transaction_type === "cashback";
+              return (
+                <Pressable
+                  key={index}
+                  onPress={() => toggleTxn(index)}
+                  style={({ pressed }) => [
+                    {
+                      flexDirection: "row",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      backgroundColor: selected
+                        ? colors.accentLight
+                        : colors.surface,
+                      borderRadius: 12,
+                      padding: 12,
+                      marginBottom: 6,
+                      borderWidth: 1,
+                      borderColor: selected ? colors.accent : colors.border,
+                      transform: [{ scale: pressed ? 0.97 : 1 }],
+                    },
+                  ]}
+                >
+                  <View style={{ flex: 1, marginRight: 8 }}>
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        gap: 6,
+                        marginBottom: 2,
+                      }}
+                    >
+                      <View
+                        style={{
+                          paddingHorizontal: 6,
+                          paddingVertical: 2,
+                          borderRadius: 4,
+                          backgroundColor: colors.surfaceAlt,
+                        }}
+                      >
+                        <Text
+                          style={{
+                            fontFamily: fonts.sansSemibold,
+                            fontSize: 9,
+                            color: colors.textSecondary,
+                          }}
+                        >
+                          {txn.transaction_type.toUpperCase()}
+                        </Text>
+                      </View>
+                      <Text
+                        numberOfLines={1}
+                        style={[
+                          typography.caption,
+                          { color: colors.textPrimary, flex: 1 },
+                        ]}
+                      >
+                        {txn.merchant_name || txn.description || "Unknown"}
+                      </Text>
+                    </View>
+                    <Text
+                      style={{
+                        fontFamily: fonts.sans,
+                        fontSize: 11,
+                        color: colors.textTertiary,
+                      }}
+                    >
+                      {txn.transaction_date}
+                    </Text>
+                  </View>
+                  <Text
+                    style={{
+                      fontFamily: fonts.sansSemibold,
+                      fontSize: 13,
+                      color: isCredit ? colors.income : colors.expense,
+                    }}
+                  >
+                    {txn.amount != null
+                      ? formatINR(Math.abs(txn.amount))
+                      : "—"}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        )}
+
+        {/* Save Button */}
+        {parsedData && (
+          <Pressable
             onPress={saveStatement}
             disabled={saving}
+            style={({ pressed }) => [
+              {
+                backgroundColor: colors.accent,
+                borderRadius: 100,
+                paddingVertical: 14,
+                alignItems: "center",
+                opacity: saving ? 0.5 : 1,
+                transform: [{ scale: pressed ? 0.97 : 1 }],
+              },
+            ]}
           >
             {saving ? (
               <ActivityIndicator color="#fff" size="small" />
             ) : (
-              <Text style={styles.saveButtonText}>
-                Save Statement ({parsedData.transactions?.length || 0} transactions)
+              <Text
+                style={{
+                  color: "#fff",
+                  fontFamily: fonts.sansSemibold,
+                  fontSize: 15,
+                }}
+              >
+                Save Statement ({parsedData.transactions?.length || 0}{" "}
+                transactions)
               </Text>
             )}
-          </TouchableOpacity>
-        </View>
-      )}
+          </Pressable>
+        )}
+      </ScrollView>
+    </View>
+  );
+}
 
-      <View style={{ height: 40 }} />
-    </ScrollView>
+function SummaryRow({
+  label,
+  value,
+  valueColor,
+  bold,
+  colors,
+}: {
+  label: string;
+  value: string;
+  valueColor?: string;
+  bold?: boolean;
+  colors: any;
+}) {
+  return (
+    <View
+      style={{
+        flexDirection: "row",
+        justifyContent: "space-between",
+        paddingVertical: 5,
+      }}
+    >
+      <Text
+        style={{
+          fontFamily: fonts.sans,
+          fontSize: 13,
+          color: colors.textSecondary,
+        }}
+      >
+        {label}
+      </Text>
+      <Text
+        style={{
+          fontFamily: bold ? fonts.sansBold : fonts.sansMedium,
+          fontSize: 13,
+          color: valueColor || colors.textPrimary,
+        }}
+      >
+        {value}
+      </Text>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  centered: {
     flex: 1,
-    backgroundColor: "#f9fafb",
-    padding: 16,
-  },
-  title: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: "#111827",
-    marginBottom: 4,
-  },
-  subtitle: {
-    fontSize: 13,
-    color: "#6b7280",
-    marginBottom: 16,
-    lineHeight: 18,
-  },
-  section: {
-    marginBottom: 16,
-  },
-  sectionTitle: {
-    fontSize: 15,
-    fontWeight: "600",
-    color: "#374151",
-    marginBottom: 8,
-  },
-  pickButton: {
-    backgroundColor: "#fff",
-    borderWidth: 1,
-    borderStyle: "dashed",
-    borderColor: "#d1d5db",
-    borderRadius: 10,
-    paddingVertical: 24,
-    paddingHorizontal: 16,
+    justifyContent: "center",
     alignItems: "center",
-    marginBottom: 12,
-  },
-  pickButtonText: {
-    fontSize: 14,
-    color: "#6b7280",
-  },
-  fileSize: {
-    fontSize: 11,
-    color: "#9ca3af",
-    marginTop: 4,
-  },
-  parseButton: {
-    backgroundColor: "#3b82f6",
-    borderRadius: 10,
-    paddingVertical: 14,
-    alignItems: "center",
-  },
-  parseButtonText: {
-    color: "#fff",
-    fontSize: 15,
-    fontWeight: "600",
-  },
-  disabledButton: {
-    opacity: 0.5,
-  },
-  summaryCard: {
-    backgroundColor: "#fff",
-    borderRadius: 10,
-    padding: 14,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
-  },
-  summaryTitle: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#374151",
-    marginBottom: 8,
-  },
-  summaryRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    paddingVertical: 4,
-  },
-  summaryLabel: {
-    fontSize: 13,
-    color: "#6b7280",
-  },
-  summaryValue: {
-    fontSize: 13,
-    fontWeight: "500",
-    color: "#111827",
-  },
-  txnRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    backgroundColor: "#fff",
-    borderRadius: 8,
-    padding: 10,
-    marginBottom: 4,
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
-  },
-  txnRowSelected: {
-    borderColor: "#3b82f6",
-    backgroundColor: "#eff6ff",
-  },
-  txnLeft: {
-    flex: 1,
-    marginRight: 8,
-  },
-  txnHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    marginBottom: 2,
-  },
-  typeBadge: {
-    paddingHorizontal: 5,
-    paddingVertical: 1,
-    borderRadius: 4,
-  },
-  typeBadgeText: {
-    fontSize: 9,
-    fontWeight: "600",
-  },
-  txnMerchant: {
-    fontSize: 13,
-    fontWeight: "500",
-    color: "#111827",
-    flex: 1,
-  },
-  txnDate: {
-    fontSize: 11,
-    color: "#9ca3af",
-  },
-  txnAmount: {
-    fontSize: 13,
-    fontWeight: "600",
-  },
-  saveButton: {
-    backgroundColor: "#059669",
-    borderRadius: 10,
-    paddingVertical: 14,
-    alignItems: "center",
-  },
-  saveButtonText: {
-    color: "#fff",
-    fontSize: 15,
-    fontWeight: "600",
   },
 });

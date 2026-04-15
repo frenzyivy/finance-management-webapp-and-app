@@ -5,17 +5,26 @@ import {
   StyleSheet,
   ScrollView,
   TextInput,
-  TouchableOpacity,
+  Pressable,
   Alert,
   ActivityIndicator,
 } from "react-native";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import Svg, { Path } from "react-native-svg";
 import { supabase } from "../lib/supabase";
+import { PageHeader } from "../components/PageHeader";
+import { useTheme } from "../lib/theme-context";
+import { text as typography, fonts } from "../lib/typography";
+import { radii } from "../lib/radii";
+import { formatINR } from "../components/komal";
 import type { RootStackParamList } from "../navigation/AppNavigator";
 
 export function AddCreditCardScreen() {
   const navigation = useNavigation();
   const route = useRoute<RouteProp<RootStackParamList, "AddCreditCard">>();
+  const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
   const existingCard = route.params?.card;
   const isEditing = !!existingCard;
 
@@ -69,86 +78,133 @@ export function AddCreditCardScreen() {
     }
   };
 
+  const inputStyle = {
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 14,
+    color: colors.textPrimary,
+    fontFamily: fonts.sansMedium,
+    fontSize: 14,
+  } as const;
+
+  const labelStyle = [typography.pillLabel, { color: colors.textTertiary, marginBottom: 6, marginTop: 16 }];
+
+  const previewLimit = parseFloat(creditLimit);
+
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Text style={styles.label}>Card Name *</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="e.g. HDFC Regalia"
-        value={cardName}
-        onChangeText={setCardName}
+    <View style={{ flex: 1, backgroundColor: colors.bg }}>
+      <PageHeader
+        title={isEditing ? "Edit Card" : "Add Card"}
+        actions={
+          <Pressable
+            onPress={() => navigation.goBack()}
+            style={({ pressed }) => [
+              styles.iconBtn,
+              {
+                backgroundColor: colors.surface,
+                borderColor: colors.border,
+                transform: [{ scale: pressed ? 0.94 : 1 }],
+              },
+            ]}
+          >
+            <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={colors.textPrimary} strokeWidth={1.8} strokeLinecap="round">
+              <Path d="M18 6L6 18M6 6l12 12" />
+            </Svg>
+          </Pressable>
+        }
       />
-
-      <Text style={styles.label}>Last 4 Digits</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="e.g. 1234"
-        keyboardType="numeric"
-        maxLength={4}
-        value={lastFour}
-        onChangeText={setLastFour}
-      />
-
-      <Text style={styles.label}>Billing Cycle Day *</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="e.g. 15"
-        keyboardType="numeric"
-        maxLength={2}
-        value={billingDay}
-        onChangeText={setBillingDay}
-      />
-
-      <Text style={styles.label}>Credit Limit (optional)</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="e.g. 200000"
-        keyboardType="numeric"
-        value={creditLimit}
-        onChangeText={setCreditLimit}
-      />
-
-      <TouchableOpacity
-        style={[styles.saveBtn, saving && { opacity: 0.6 }]}
-        onPress={handleSave}
-        disabled={saving}
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={{ paddingBottom: 40 + insets.bottom, paddingHorizontal: 24 }}
+        keyboardShouldPersistTaps="handled"
       >
-        {saving ? (
-          <ActivityIndicator color="#fff" />
-        ) : (
-          <Text style={styles.saveBtnText}>
-            {isEditing ? "Update Card" : "Save Card"}
+        <Text style={labelStyle}>Card Name *</Text>
+        <TextInput
+          style={inputStyle}
+          placeholder="e.g. HDFC Regalia"
+          placeholderTextColor={colors.textTertiary}
+          value={cardName}
+          onChangeText={setCardName}
+        />
+
+        <Text style={labelStyle}>Last 4 Digits</Text>
+        <TextInput
+          style={inputStyle}
+          placeholder="e.g. 1234"
+          placeholderTextColor={colors.textTertiary}
+          keyboardType="numeric"
+          maxLength={4}
+          value={lastFour}
+          onChangeText={setLastFour}
+        />
+
+        <Text style={labelStyle}>Billing Cycle Day *</Text>
+        <TextInput
+          style={inputStyle}
+          placeholder="e.g. 15"
+          placeholderTextColor={colors.textTertiary}
+          keyboardType="numeric"
+          maxLength={2}
+          value={billingDay}
+          onChangeText={setBillingDay}
+        />
+
+        <Text style={labelStyle}>Credit Limit (optional)</Text>
+        <TextInput
+          style={inputStyle}
+          placeholder="e.g. 200000"
+          placeholderTextColor={colors.textTertiary}
+          keyboardType="numeric"
+          value={creditLimit}
+          onChangeText={setCreditLimit}
+        />
+        {!isNaN(previewLimit) && previewLimit > 0 && (
+          <Text style={[typography.caption, { color: colors.textSecondary, marginTop: 6 }]}>
+            {formatINR(previewLimit)}
           </Text>
         )}
-      </TouchableOpacity>
-    </ScrollView>
+
+        <Pressable
+          onPress={handleSave}
+          disabled={saving}
+          style={({ pressed }) => [
+            styles.saveBtn,
+            {
+              backgroundColor: colors.accent,
+              opacity: saving ? 0.6 : 1,
+              transform: [{ scale: pressed ? 0.97 : 1 }],
+            },
+          ]}
+        >
+          {saving ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text style={[styles.saveBtnText, { fontFamily: fonts.sansSemibold }]}>
+              {isEditing ? "Update Card" : "Save Card"}
+            </Text>
+          )}
+        </Pressable>
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#fff" },
-  content: { padding: 20, paddingBottom: 40 },
-  label: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#1f2937",
-    marginBottom: 6,
-    marginTop: 16,
-  },
-  input: {
+  iconBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: radii.full,
     borderWidth: 1,
-    borderColor: "#d1d5db",
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 16,
-    color: "#1f2937",
+    alignItems: "center",
+    justifyContent: "center",
   },
   saveBtn: {
-    backgroundColor: "#0d9488",
-    padding: 16,
+    paddingVertical: 14,
     borderRadius: 12,
     alignItems: "center",
     marginTop: 32,
   },
-  saveBtnText: { color: "#fff", fontSize: 16, fontWeight: "bold" },
+  saveBtnText: { color: "#fff", fontSize: 15, fontWeight: "600" },
 });

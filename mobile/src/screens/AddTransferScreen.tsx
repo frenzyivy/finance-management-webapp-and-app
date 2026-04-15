@@ -5,16 +5,23 @@ import {
   StyleSheet,
   ScrollView,
   TextInput,
-  TouchableOpacity,
+  Pressable,
   Alert,
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import Svg, { Path } from "react-native-svg";
 import { supabase } from "../lib/supabase";
 import { PickerModal } from "../components/PickerModal";
+import { PageHeader } from "../components/PageHeader";
 import { formatCurrency } from "../lib/format";
+import { useTheme } from "../lib/theme-context";
+import { text as typography, fonts } from "../lib/typography";
+import { radii } from "../lib/radii";
+import { formatINR } from "../components/komal";
 import type {
   BusinessExpense,
   BusinessIncome,
@@ -28,6 +35,8 @@ const DIRECTION_OPTIONS = [
 
 export function AddTransferScreen() {
   const navigation = useNavigation();
+  const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
   const [saving, setSaving] = useState(false);
 
   const [direction, setDirection] = useState<TransferDirection>("personal_to_business");
@@ -139,111 +148,143 @@ export function AddTransferScreen() {
     }
   };
 
+  const inputStyle = {
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 14,
+    color: colors.textPrimary,
+    fontFamily: fonts.sansMedium,
+    fontSize: 14,
+  } as const;
+
+  const labelStyle = [typography.pillLabel, { color: colors.textTertiary, marginBottom: 6, marginTop: 16 }];
+
+  const previewAmount = parseFloat(amount);
+
   return (
-    <KeyboardAvoidingView
-      style={styles.flex}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-    >
-      <ScrollView
-        style={styles.screen}
-        contentContainerStyle={styles.content}
-        keyboardShouldPersistTaps="handled"
+    <View style={{ flex: 1, backgroundColor: colors.bg }}>
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
-        <Text style={styles.label}>Direction *</Text>
-        <TouchableOpacity
-          style={styles.pickerButton}
-          onPress={() => setShowDirectionPicker(true)}
-        >
-          <Text style={styles.pickerButtonText}>{getDirectionLabel(direction)}</Text>
-          <Text style={styles.pickerArrow}>▼</Text>
-        </TouchableOpacity>
-
-        <Text style={styles.label}>Amount *</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="0"
-          placeholderTextColor="#9ca3af"
-          keyboardType="numeric"
-          value={amount}
-          onChangeText={setAmount}
-        />
-
-        <Text style={styles.label}>Date *</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="YYYY-MM-DD"
-          placeholderTextColor="#9ca3af"
-          value={date}
-          onChangeText={setDate}
-        />
-
-        <Text style={styles.label}>Reason *</Text>
-        <TextInput
-          style={styles.input}
-          placeholder={
-            direction === "personal_to_business"
-              ? "e.g. Paid for VPS hosting"
-              : "e.g. Client payment withdrawal"
+        <PageHeader
+          title="Log Transfer"
+          actions={
+            <Pressable
+              onPress={() => navigation.goBack()}
+              style={({ pressed }) => [
+                styles.iconBtn,
+                {
+                  backgroundColor: colors.surface,
+                  borderColor: colors.border,
+                  transform: [{ scale: pressed ? 0.94 : 1 }],
+                },
+              ]}
+            >
+              <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={colors.textPrimary} strokeWidth={1.8} strokeLinecap="round">
+                <Path d="M18 6L6 18M6 6l12 12" />
+              </Svg>
+            </Pressable>
           }
-          placeholderTextColor="#9ca3af"
-          value={reason}
-          onChangeText={setReason}
         />
-
-        {direction === "personal_to_business" && (
-          <>
-            <Text style={styles.label}>Link to business expense (optional)</Text>
-            <TouchableOpacity
-              style={styles.pickerButton}
-              onPress={() => setShowExpensePicker(true)}
-            >
-              <Text style={styles.pickerButtonText} numberOfLines={1}>
-                {getExpenseLabel(linkedExpenseId ?? "")}
-              </Text>
-              <Text style={styles.pickerArrow}>▼</Text>
-            </TouchableOpacity>
-          </>
-        )}
-
-        {direction === "business_to_personal" && (
-          <>
-            <Text style={styles.label}>Link to business income (optional)</Text>
-            <TouchableOpacity
-              style={styles.pickerButton}
-              onPress={() => setShowIncomePicker(true)}
-            >
-              <Text style={styles.pickerButtonText} numberOfLines={1}>
-                {getIncomeLabel(linkedIncomeId ?? "")}
-              </Text>
-              <Text style={styles.pickerArrow}>▼</Text>
-            </TouchableOpacity>
-          </>
-        )}
-
-        <Text style={styles.label}>Notes</Text>
-        <TextInput
-          style={[styles.input, styles.textArea]}
-          placeholder="Optional notes..."
-          placeholderTextColor="#9ca3af"
-          multiline
-          numberOfLines={3}
-          value={notes}
-          onChangeText={setNotes}
-        />
-
-        <TouchableOpacity
-          style={[styles.saveButton, saving && styles.saveButtonDisabled]}
-          onPress={handleSave}
-          disabled={saving}
-          activeOpacity={0.8}
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={{ paddingBottom: 40 + insets.bottom, paddingHorizontal: 24 }}
+          keyboardShouldPersistTaps="handled"
         >
-          {saving ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={styles.saveButtonText}>Log Transfer</Text>
+          <Text style={labelStyle}>Direction *</Text>
+          <PickerField colors={colors} onPress={() => setShowDirectionPicker(true)}>
+            {getDirectionLabel(direction)}
+          </PickerField>
+
+          <Text style={labelStyle}>Amount *</Text>
+          <TextInput
+            style={inputStyle}
+            placeholder="0"
+            placeholderTextColor={colors.textTertiary}
+            keyboardType="numeric"
+            value={amount}
+            onChangeText={setAmount}
+          />
+          {!!previewAmount && previewAmount > 0 && (
+            <Text style={[typography.caption, { color: colors.textSecondary, marginTop: 6 }]}>
+              {formatINR(previewAmount)}
+            </Text>
           )}
-        </TouchableOpacity>
-      </ScrollView>
+
+          <Text style={labelStyle}>Date *</Text>
+          <TextInput
+            style={inputStyle}
+            placeholder="YYYY-MM-DD"
+            placeholderTextColor={colors.textTertiary}
+            value={date}
+            onChangeText={setDate}
+          />
+
+          <Text style={labelStyle}>Reason *</Text>
+          <TextInput
+            style={inputStyle}
+            placeholder={
+              direction === "personal_to_business"
+                ? "e.g. Paid for VPS hosting"
+                : "e.g. Client payment withdrawal"
+            }
+            placeholderTextColor={colors.textTertiary}
+            value={reason}
+            onChangeText={setReason}
+          />
+
+          {direction === "personal_to_business" && (
+            <>
+              <Text style={labelStyle}>Link to business expense (optional)</Text>
+              <PickerField colors={colors} onPress={() => setShowExpensePicker(true)}>
+                {getExpenseLabel(linkedExpenseId ?? "")}
+              </PickerField>
+            </>
+          )}
+
+          {direction === "business_to_personal" && (
+            <>
+              <Text style={labelStyle}>Link to business income (optional)</Text>
+              <PickerField colors={colors} onPress={() => setShowIncomePicker(true)}>
+                {getIncomeLabel(linkedIncomeId ?? "")}
+              </PickerField>
+            </>
+          )}
+
+          <Text style={labelStyle}>Notes</Text>
+          <TextInput
+            style={[inputStyle, styles.textArea]}
+            placeholder="Optional notes..."
+            placeholderTextColor={colors.textTertiary}
+            multiline
+            numberOfLines={3}
+            value={notes}
+            onChangeText={setNotes}
+          />
+
+          <Pressable
+            onPress={handleSave}
+            disabled={saving}
+            style={({ pressed }) => [
+              styles.saveButton,
+              {
+                backgroundColor: colors.accent,
+                opacity: saving ? 0.6 : 1,
+                transform: [{ scale: pressed ? 0.97 : 1 }],
+              },
+            ]}
+          >
+            {saving ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={[styles.saveButtonText, { fontFamily: fonts.sansSemibold }]}>Log Transfer</Text>
+            )}
+          </Pressable>
+        </ScrollView>
+      </KeyboardAvoidingView>
 
       <PickerModal
         visible={showDirectionPicker}
@@ -273,52 +314,69 @@ export function AddTransferScreen() {
         onSelect={(val) => setLinkedIncomeId(val || null)}
         title="Link to Business Income"
       />
-    </KeyboardAvoidingView>
+    </View>
+  );
+}
+
+function PickerField({
+  colors,
+  onPress,
+  children,
+}: {
+  colors: ReturnType<typeof useTheme>["colors"];
+  onPress: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [
+        {
+          backgroundColor: colors.surface,
+          borderColor: colors.border,
+          borderWidth: 1,
+          borderRadius: 12,
+          padding: 14,
+          flexDirection: "row",
+          justifyContent: "space-between",
+          alignItems: "center",
+          transform: [{ scale: pressed ? 0.97 : 1 }],
+        },
+      ]}
+    >
+      <Text
+        numberOfLines={1}
+        style={{
+          color: colors.textPrimary,
+          fontFamily: fonts.sansMedium,
+          fontSize: 14,
+          flex: 1,
+          marginRight: 8,
+        }}
+      >
+        {children}
+      </Text>
+      <Text style={{ fontSize: 12, color: colors.textSecondary }}>▼</Text>
+    </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  screen: { flex: 1, backgroundColor: "#fff" },
-  content: { padding: 16, paddingBottom: 40 },
-  label: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#1f2937",
-    marginBottom: 6,
-    marginTop: 16,
-  },
-  input: {
+  iconBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: radii.full,
     borderWidth: 1,
-    borderColor: "#d1d5db",
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 16,
-    color: "#1f2937",
-    backgroundColor: "#f9fafb",
+    alignItems: "center",
+    justifyContent: "center",
   },
   textArea: { minHeight: 80, textAlignVertical: "top" },
-  pickerButton: {
-    borderWidth: 1,
-    borderColor: "#d1d5db",
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    backgroundColor: "#f9fafb",
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  pickerButtonText: { fontSize: 16, color: "#1f2937", flex: 1, marginRight: 8 },
-  pickerArrow: { fontSize: 12, color: "#6b7280" },
   saveButton: {
-    backgroundColor: "#185FA5",
     borderRadius: 12,
-    paddingVertical: 16,
+    paddingVertical: 14,
     alignItems: "center",
     marginTop: 24,
   },
-  saveButtonDisabled: { opacity: 0.6 },
-  saveButtonText: { color: "#fff", fontSize: 16, fontWeight: "700" },
+  saveButtonText: { color: "#fff", fontSize: 15, fontWeight: "600" },
 });

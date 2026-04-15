@@ -1,57 +1,81 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
-  StyleSheet,
-  FlatList,
+  ScrollView,
   RefreshControl,
   ActivityIndicator,
-  TouchableOpacity,
   Alert,
+  Pressable,
+  StyleSheet,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import Svg, { Path } from "react-native-svg";
+import { format } from "date-fns";
 import { supabase } from "../lib/supabase";
 import { useSyncStore } from "../lib/sync-store";
-import { formatCurrency, formatDate } from "../lib/format";
 import { EXPENSE_CATEGORIES, PAYMENT_METHODS } from "../lib/constants";
+import { useTheme } from "../lib/theme-context";
+import { navHeight } from "../lib/radii";
+import { PageHeader } from "../components/PageHeader";
+import {
+  SummaryBanner,
+  TabSwitcher,
+  TransactionCard,
+  formatINR,
+} from "../components/komal";
 import type { ExpenseEntry } from "../types/database";
 
-function getCategoryLabel(value: string): string {
-  return EXPENSE_CATEGORIES.find((c) => c.value === value)?.label ?? value;
+type TabKey = "all" | "rent" | "food_groceries" | "utilities" | "shopping";
+
+const TABS: Array<{ key: TabKey; label: string }> = [
+  { key: "all", label: "All" },
+  { key: "rent", label: "Rent" },
+  { key: "food_groceries", label: "Food" },
+  { key: "utilities", label: "Utilities" },
+  { key: "shopping", label: "Shopping" },
+];
+
+function getCategoryLabel(v: string): string {
+  return EXPENSE_CATEGORIES.find((c) => c.value === v)?.label ?? v;
 }
 
-function getPaymentMethodLabel(value: string | null): string {
-  if (!value) return "";
-  return PAYMENT_METHODS.find((p) => p.value === value)?.label ?? value;
+function getPaymentLabel(v: string | null): string {
+  if (!v) return "";
+  return PAYMENT_METHODS.find((p) => p.value === v)?.label ?? v;
 }
 
-const CATEGORY_COLORS: Record<string, string> = {
-  credit_card_payments: "#7c3aed",
-  emis: "#db2777",
-  rent: "#ea580c",
-  food_groceries: "#16a34a",
-  utilities: "#2563eb",
-  transport: "#0891b2",
-  shopping: "#d97706",
-  health: "#dc2626",
-  education: "#4f46e5",
-  entertainment: "#c026d3",
-  subscriptions: "#0d9488",
-  family_personal: "#be185d",
-  miscellaneous: "#6b7280",
-};
-
-function getCategoryColor(category: string): string {
-  return CATEGORY_COLORS[category] ?? "#6b7280";
+function mapExpenseCategory(cat: string): string {
+  switch (cat) {
+    case "food_groceries":
+      return "food";
+    case "credit_card_payments":
+      return "credit_card";
+    case "emis":
+      return "emi";
+    case "family_personal":
+      return "family";
+    case "debt_repayment":
+      return "credit_card";
+    default:
+      return cat;
+  }
 }
+
+type NavProp = NativeStackNavigationProp<Record<string, object | undefined>>;
 
 export function ExpensesScreen() {
-  const navigation = useNavigation<any>();
+  const navigation = useNavigation<NavProp>();
+  const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
   const syncVersion = useSyncStore((s) => s.syncVersion);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [entries, setEntries] = useState<ExpenseEntry[]>([]);
   const [totalThisMonth, setTotalThisMonth] = useState(0);
+  const [tab, setTab] = useState<TabKey>("all");
 
   const fetchData = useCallback(async () => {
     try {
@@ -71,7 +95,6 @@ export function ExpensesScreen() {
         .order("date", { ascending: false });
 
       if (error) throw error;
-
       const items: ExpenseEntry[] = data ?? [];
       setEntries(items);
       setTotalThisMonth(items.reduce((s, e) => s + e.amount, 0));
@@ -88,260 +111,154 @@ export function ExpensesScreen() {
   }, [fetchData, syncVersion]);
 
   useEffect(() => {
-    const unsubscribe = navigation.addListener("focus", () => {
-      fetchData();
-    });
-    return unsubscribe;
+    const unsub = navigation.addListener("focus", () => fetchData());
+    return unsub;
   }, [navigation, fetchData]);
 
-  const onRefresh = useCallback(() => {
-    setRefreshing(true);
-    fetchData();
-  }, [fetchData]);
+  const filtered = useMemo(() => {
+    if (tab === "all") return entries;
+    return entries.filter((e) => e.category === tab);
+  }, [entries, tab]);
 
   const handleLongPress = useCallback(
     (entry: ExpenseEntry) => {
-      Alert.alert(
-        entry.payee_name ?? getCategoryLabel(entry.category),
-        formatCurrency(entry.amount),
-        [
-          { text: "Cancel", style: "cancel" },
-          {
-            text: "Edit",
-            onPress: () => navigation.navigate("AddExpense", { entry }),
+      Alert.alert(entry.payee_name ?? "Expense", formatINR(entry.amount), [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Edit",
+          onPress: () => navigation.navigate("AddExpense", { entry }),
+        },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              const { error } = await supabase
+                .from("expense_entries")
+                .delete()
+                .eq("id", entry.id);
+              if (error) throw error;
+              fetchData();
+            } catch (err: unknown) {
+              const message =
+                err instanceof Error ? err.message : "Failed to delete entry";
+              Alert.alert("Error", message);
+            }
           },
-          {
-            text: "Delete",
-            style: "destructive",
-            onPress: async () => {
-              try {
-                const { error } = await supabase
-                  .from("expense_entries")
-                  .delete()
-                  .eq("id", entry.id);
-                if (error) throw error;
-                fetchData();
-              } catch (err: any) {
-                Alert.alert("Error", err.message ?? "Failed to delete entry");
-              }
-            },
-          },
-        ]
-      );
+        },
+      ]);
     },
     [fetchData, navigation]
   );
 
-  const renderItem = ({ item }: { item: ExpenseEntry }) => {
-    const catColor = getCategoryColor(item.category);
-    return (
-      <TouchableOpacity
-        style={styles.entryRow}
-        onLongPress={() => handleLongPress(item)}
-        activeOpacity={0.7}
-      >
-        <View style={styles.entryLeft}>
-          <Text style={styles.entryDescription} numberOfLines={1}>
-            {item.payee_name ?? getCategoryLabel(item.category)}
-          </Text>
-          <View style={styles.entryMeta}>
-            <View style={[styles.badge, { backgroundColor: catColor + "20" }]}>
-              <Text style={[styles.badgeText, { color: catColor }]}>
-                {getCategoryLabel(item.category)}
-              </Text>
-            </View>
-            {item.is_auto_generated && (
-              <View style={[styles.badge, { backgroundColor: "#e5e7eb" }]}>
-                <Text style={[styles.badgeText, { color: "#6b7280" }]}>Auto</Text>
-              </View>
-            )}
-            {item.is_recurring && !item.is_auto_generated && (
-              <View style={[styles.badge, { backgroundColor: "#dbeafe" }]}>
-                <Text style={[styles.badgeText, { color: "#2563eb" }]}>Recurring</Text>
-              </View>
-            )}
-            {item.payment_method && (
-              <Text style={styles.paymentMethod}>
-                {getPaymentMethodLabel(item.payment_method)}
-              </Text>
-            )}
-          </View>
-          <Text style={styles.entryDate}>{formatDate(item.date)}</Text>
-        </View>
-        <Text style={styles.entryAmount}>-{formatCurrency(item.amount)}</Text>
-      </TouchableOpacity>
-    );
-  };
-
   if (loading) {
     return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#0d9488" />
+      <View style={[styles.centered, { backgroundColor: colors.bg }]}>
+        <ActivityIndicator size="large" color={colors.accent} />
       </View>
     );
   }
 
   return (
-    <View style={styles.screen}>
-      {/* Summary Bar */}
-      <View style={styles.summaryBar}>
-        <Text style={styles.summaryLabel}>Total This Month</Text>
-        <Text style={styles.summaryAmount}>
-          {formatCurrency(totalThisMonth)}
-        </Text>
-      </View>
-
-      <FlatList
-        data={entries}
-        keyExtractor={(item) => item.id}
-        renderItem={renderItem}
-        contentContainerStyle={styles.listContent}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            tintColor="#0d9488"
-          />
-        }
-        ListEmptyComponent={
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyText}>No expenses this month.</Text>
-            <Text style={styles.emptyHint}>
-              Tap the + button to add your first expense.
-            </Text>
-          </View>
+    <ScrollView
+      style={{ flex: 1, backgroundColor: colors.bg }}
+      contentContainerStyle={{
+        paddingBottom: navHeight + 40 + insets.bottom,
+      }}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={() => {
+            setRefreshing(true);
+            fetchData();
+          }}
+          tintColor={colors.accent}
+        />
+      }
+    >
+      <PageHeader
+        title="Expenses"
+        actions={
+          <Pressable
+            onPress={() => navigation.navigate("AddExpense")}
+            style={({ pressed }) => [
+              styles.iconBtn,
+              {
+                backgroundColor: colors.surface,
+                borderColor: colors.border,
+                transform: [{ scale: pressed ? 0.94 : 1 }],
+              },
+            ]}
+          >
+            <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={colors.textPrimary} strokeWidth={1.8} strokeLinecap="round">
+              <Path d="M12 5v14M5 12h14" />
+            </Svg>
+          </Pressable>
         }
       />
 
-      {/* FAB */}
-      <TouchableOpacity
-        style={styles.fab}
-        onPress={() => navigation.navigate("AddExpense")}
-        activeOpacity={0.8}
-      >
-        <Text style={styles.fabText}>+</Text>
-      </TouchableOpacity>
-    </View>
+      <SummaryBanner
+        label="This Month"
+        value={totalThisMonth}
+        tone="expense"
+        emoji="💸"
+      />
+
+      <TabSwitcher tabs={TABS} value={tab} onChange={setTab} />
+
+      {filtered.length === 0 ? (
+        <Text style={[styles.empty, { color: colors.textSecondary }]}>
+          No expenses match this view. Tap + to add one.
+        </Text>
+      ) : (
+        filtered.map((entry) => (
+          <TransactionCard
+            key={entry.id}
+            name={entry.payee_name ?? "Expense"}
+            kind="expense"
+            category={mapExpenseCategory(entry.category)}
+            categoryLabel={getCategoryLabel(entry.category)}
+            metaTag={
+              entry.is_auto_generated
+                ? "Auto"
+                : entry.funding_source === "debt_funded"
+                ? "Debt"
+                : entry.funding_source === "debt_repayment"
+                ? "EMI"
+                : entry.is_recurring
+                ? "Recurring"
+                : undefined
+            }
+            metaTagTone={entry.is_auto_generated ? "muted" : "default"}
+            date={format(new Date(entry.date), "d MMM")}
+            method={getPaymentLabel(entry.payment_method)}
+            amount={entry.amount}
+            onPress={() => handleLongPress(entry)}
+          />
+        ))
+      )}
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: "#fff",
-  },
   centered: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#fff",
   },
-  summaryBar: {
-    backgroundColor: "#f87171",
-    paddingVertical: 16,
-    paddingHorizontal: 16,
-    flexDirection: "row",
-    justifyContent: "space-between",
+  iconBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 100,
+    borderWidth: 1,
     alignItems: "center",
-  },
-  summaryLabel: {
-    color: "#fff",
-    fontSize: 14,
-    fontWeight: "500",
-  },
-  summaryAmount: {
-    color: "#fff",
-    fontSize: 20,
-    fontWeight: "700",
-  },
-  listContent: {
-    padding: 16,
-    paddingBottom: 100,
-  },
-  entryRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#f3f4f6",
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 10,
-    elevation: 2,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-  },
-  entryLeft: {
-    flex: 1,
-    marginRight: 8,
-  },
-  entryDescription: {
-    fontSize: 15,
-    fontWeight: "600",
-    color: "#1f2937",
-    marginBottom: 4,
-  },
-  entryMeta: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    marginBottom: 4,
-  },
-  badge: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 10,
-  },
-  badgeText: {
-    fontSize: 11,
-    fontWeight: "600",
-  },
-  paymentMethod: {
-    fontSize: 11,
-    color: "#6b7280",
-  },
-  entryDate: {
-    fontSize: 12,
-    color: "#6b7280",
-  },
-  entryAmount: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: "#f87171",
-  },
-  emptyState: {
-    alignItems: "center",
-    paddingVertical: 48,
-  },
-  emptyText: {
-    fontSize: 15,
-    color: "#6b7280",
-    marginBottom: 4,
-  },
-  emptyHint: {
-    fontSize: 13,
-    color: "#9ca3af",
-  },
-  fab: {
-    position: "absolute",
-    bottom: 24,
-    right: 24,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: "#0d9488",
     justifyContent: "center",
-    alignItems: "center",
-    elevation: 6,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
   },
-  fabText: {
-    fontSize: 28,
-    color: "#fff",
-    fontWeight: "300",
-    marginTop: -2,
+  empty: {
+    textAlign: "center",
+    marginHorizontal: 24,
+    marginVertical: 32,
+    fontSize: 13,
   },
 });

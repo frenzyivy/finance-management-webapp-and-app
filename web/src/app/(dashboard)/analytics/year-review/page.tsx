@@ -25,6 +25,7 @@ import {
 } from "recharts";
 
 import { createClient } from "@/lib/supabase/client";
+import { PageHeader } from "@/components/layout/PageHeader";
 import { formatCurrency } from "@/lib/utils/currency";
 import { cn } from "@/lib/utils";
 import { EXPENSE_CATEGORIES, INCOME_CATEGORIES } from "@/lib/constants/categories";
@@ -332,8 +333,14 @@ export default function YearReviewPage() {
   if (loading) return <Skeleton />;
 
   return (
-    <div className="space-y-8">
-      {/* ── Header ── */}
+    <div className="flex flex-col">
+      <div className="animate d1">
+        <PageHeader
+          title={`Year in Review — ${selectedYear}`}
+          eyebrow="12-month snapshot"
+        />
+      </div>
+      <div className="px-6 space-y-8">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
           <Link href="/analytics">
@@ -341,9 +348,6 @@ export default function YearReviewPage() {
               <ArrowLeft className="h-4 w-4" />
             </Button>
           </Link>
-          <h2 className="text-2xl font-bold tracking-tight">
-            Year in Review — {selectedYear}
-          </h2>
         </div>
 
         <div className="flex items-center gap-2">
@@ -684,6 +688,7 @@ export default function YearReviewPage() {
           </CardContent>
         </Card>
       )}
+      </div>
     </div>
   );
 }

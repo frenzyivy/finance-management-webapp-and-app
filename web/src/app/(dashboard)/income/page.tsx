@@ -1,35 +1,16 @@
 "use client";
 
-import { useState } from "react";
-import {
-  Plus,
-  Pencil,
-  Trash2,
-  IndianRupee,
-  Hash,
-  TrendingUp,
-  Wallet,
-  Loader2,
-} from "lucide-react";
+import { useMemo, useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
+import { format } from "date-fns";
+import { Loader2 } from "lucide-react";
 
 import { useIncome } from "@/hooks/use-income";
-import { formatCurrency } from "@/lib/utils/currency";
-import { formatDate } from "@/lib/utils/date";
 import { INCOME_CATEGORIES, PAYMENT_METHODS } from "@/lib/constants/categories";
 import type { IncomeEntry } from "@/types/database";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
   DialogContent,
@@ -40,250 +21,216 @@ import {
 } from "@/components/ui/dialog";
 import { IncomeForm } from "@/components/forms/income-form";
 
+import { PageHeader, HeaderIconButton } from "@/components/layout/PageHeader";
+import {
+  SummaryBanner,
+  TabSwitcher,
+  TransactionCard,
+  SectionHeader,
+  CategoryBreakdownRow,
+  CATEGORY_COLORS,
+  formatINR,
+} from "@/components/komal";
+
+type TabKey = "all" | "salary" | "freelance" | "side_income" | "other";
+
+const TABS: Array<{ key: TabKey; label: string }> = [
+  { key: "all", label: "All" },
+  { key: "salary", label: "Salary" },
+  { key: "freelance", label: "Freelance" },
+  { key: "side_income", label: "Side Income" },
+  { key: "other", label: "Other" },
+];
+
 function getCategoryLabel(value: string) {
   return INCOME_CATEGORIES.find((c) => c.value === value)?.label ?? value;
 }
 
-function getPaymentMethodLabel(value: string) {
+function getPaymentLabel(value: string) {
   return PAYMENT_METHODS.find((p) => p.value === value)?.label ?? value;
 }
 
 export default function IncomePage() {
-  const {
-    entries,
-    loading,
-    fetchEntries,
-    deleteEntry,
-    totalThisMonth,
-    monthEntryCount,
-    avgPerEntry,
-  } = useIncome();
-
+  const searchParams = useSearchParams();
+  const { entries, loading, fetchEntries, deleteEntry, totalThisMonth } = useIncome();
+  const [tab, setTab] = useState<TabKey>("all");
   const [formOpen, setFormOpen] = useState(false);
-  const [editingEntry, setEditingEntry] = useState<IncomeEntry | undefined>(
-    undefined
-  );
+  const [editing, setEditing] = useState<IncomeEntry | undefined>(undefined);
   const [deleteTarget, setDeleteTarget] = useState<IncomeEntry | null>(null);
   const [deleting, setDeleting] = useState(false);
 
-  const openAddDialog = () => {
-    setEditingEntry(undefined);
-    setFormOpen(true);
-  };
+  useEffect(() => {
+    if (searchParams.get("new") === "1") {
+      setEditing(undefined);
+      setFormOpen(true);
+    }
+  }, [searchParams]);
 
-  const openEditDialog = (entry: IncomeEntry) => {
-    setEditingEntry(entry);
-    setFormOpen(true);
-  };
+  const filtered = useMemo(() => {
+    if (tab === "all") return entries;
+    return entries.filter((e) => e.category === tab);
+  }, [entries, tab]);
 
-  const handleFormSuccess = () => {
-    setFormOpen(false);
-    setEditingEntry(undefined);
-    fetchEntries();
-  };
-
-  const handleFormCancel = () => {
-    setFormOpen(false);
-    setEditingEntry(undefined);
-  };
+  const sources = useMemo(() => {
+    const totals = new Map<string, number>();
+    for (const e of entries) {
+      totals.set(e.category, (totals.get(e.category) || 0) + Number(e.amount));
+    }
+    const sum = [...totals.values()].reduce((a, b) => a + b, 0) || 1;
+    return [...totals.entries()]
+      .map(([cat, amt]) => ({
+        cat,
+        amt,
+        percent: (amt / sum) * 100,
+      }))
+      .sort((a, b) => b.amt - a.amt);
+  }, [entries]);
 
   const handleDelete = async () => {
     if (!deleteTarget) return;
     setDeleting(true);
     const { error } = await deleteEntry(deleteTarget.id);
-    if (error) {
-      toast.error("Failed to delete entry");
-    } else {
-      toast.success("Income entry deleted");
-    }
+    if (error) toast.error("Failed to delete entry");
+    else toast.success("Income entry deleted");
     setDeleting(false);
     setDeleteTarget(null);
   };
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold tracking-tight">Income</h2>
-        <Button onClick={openAddDialog}>
-          <Plus className="size-4" />
-          Add Income
-        </Button>
+    <div className="flex flex-col">
+      <div className="animate d1">
+        <PageHeader
+          title="Income"
+          actions={
+            <HeaderIconButton
+              aria-label="Add income"
+              onClick={() => {
+                setEditing(undefined);
+                setFormOpen(true);
+              }}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+                <path d="M12 5v14M5 12h14" />
+              </svg>
+            </HeaderIconButton>
+          }
+        />
       </div>
 
-      {/* Summary Cards */}
-      <div className="grid gap-4 sm:grid-cols-3">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Total This Month
-            </CardTitle>
-            <IndianRupee className="size-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold">
-              {formatCurrency(totalThisMonth)}
-            </p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Entries This Month
-            </CardTitle>
-            <Hash className="size-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold">{monthEntryCount}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Average per Entry
-            </CardTitle>
-            <TrendingUp className="size-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold">{formatCurrency(avgPerEntry)}</p>
-          </CardContent>
-        </Card>
+      <div className="animate d2">
+        <SummaryBanner
+          label="This Month"
+          value={totalThisMonth}
+          tone="income"
+          emoji="💰"
+        />
       </div>
 
-      {/* Table / Empty State */}
-      {loading ? (
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="size-6 animate-spin text-muted-foreground" />
-        </div>
-      ) : entries.length === 0 ? (
-        <Card>
-          <CardContent className="flex flex-col items-center justify-center py-12 text-center">
-            <Wallet className="size-10 text-muted-foreground" />
-            <h3 className="mt-4 text-lg font-semibold">No income entries yet</h3>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Start tracking your income by adding your first entry.
-            </p>
-            <Button className="mt-4" onClick={openAddDialog}>
-              <Plus className="size-4" />
-              Add your first income entry
-            </Button>
-          </CardContent>
-        </Card>
-      ) : (
-        <Card className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Date</TableHead>
-                <TableHead>Source</TableHead>
-                <TableHead>Category</TableHead>
-                <TableHead className="text-right">Amount</TableHead>
-                <TableHead className="hidden sm:table-cell">
-                  Payment Method
-                </TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {entries.map((entry) => (
-                <TableRow key={entry.id}>
-                  <TableCell>{formatDate(entry.date)}</TableCell>
-                  <TableCell className="font-medium">
-                    {entry.source_name}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-1.5">
-                      <Badge className="bg-teal-100 text-teal-800 dark:bg-teal-900/40 dark:text-teal-300">
-                        {getCategoryLabel(entry.category)}
-                      </Badge>
-                      {entry.is_auto_generated && (
-                        <Badge
-                          variant="secondary"
-                          className="bg-gray-100 text-gray-500 dark:bg-gray-800/50 dark:text-gray-400 text-[10px]"
-                        >
-                          Auto
-                        </Badge>
-                      )}
-                      {entry.is_recurring && !entry.is_auto_generated && (
-                        <Badge
-                          variant="secondary"
-                          className="bg-blue-100 text-blue-600 dark:bg-blue-900/40 dark:text-blue-300 text-[10px]"
-                        >
-                          Recurring
-                        </Badge>
-                      )}
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-right font-medium">
-                    {formatCurrency(entry.amount)}
-                  </TableCell>
-                  <TableCell className="hidden sm:table-cell">
-                    {getPaymentMethodLabel(entry.payment_method)}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex items-center justify-end gap-1">
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        onClick={() => openEditDialog(entry)}
-                      >
-                        <Pencil className="size-3.5" />
-                        <span className="sr-only">Edit</span>
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        onClick={() => setDeleteTarget(entry)}
-                      >
-                        <Trash2 className="size-3.5 text-destructive" />
-                        <span className="sr-only">Delete</span>
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </Card>
+      <div className="animate d3">
+        <TabSwitcher tabs={TABS} value={tab} onChange={setTab} />
+      </div>
+
+      <div className="flex flex-col gap-1.5 mb-6">
+        {loading ? (
+          <div className="flex items-center justify-center py-10 text-[var(--text-secondary)]">
+            <Loader2 className="size-5 animate-spin" />
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="mx-6 py-10 text-center text-[var(--text-secondary)] text-sm">
+            No entries yet. Tap + to add your first income.
+          </div>
+        ) : (
+          filtered.map((entry, idx) => (
+            <div
+              key={entry.id}
+              className={`animate d${Math.min(idx + 4, 10)} mx-6`}
+            >
+              <TransactionCard
+                name={entry.source_name}
+                kind="income"
+                category={entry.category}
+                categoryLabel={getCategoryLabel(entry.category)}
+                metaTag={
+                  entry.is_auto_generated
+                    ? "Auto"
+                    : entry.is_recurring
+                    ? "Recurring"
+                    : undefined
+                }
+                metaTagTone={entry.is_auto_generated ? "muted" : "default"}
+                date={format(new Date(entry.date), "d MMM")}
+                method={getPaymentLabel(entry.payment_method)}
+                amount={entry.amount}
+                onClick={() => {
+                  setEditing(entry);
+                  setFormOpen(true);
+                }}
+              />
+            </div>
+          ))
+        )}
+      </div>
+
+      {sources.length > 0 && (
+        <>
+          <div className="animate d6">
+            <SectionHeader title="Sources" />
+          </div>
+          {sources.map((s, idx) => (
+            <div
+              key={s.cat}
+              className={`animate d${Math.min(idx + 7, 10)}`}
+            >
+              <CategoryBreakdownRow
+                name={getCategoryLabel(s.cat)}
+                color={CATEGORY_COLORS[s.cat] || "#0D9373"}
+                amount={s.amt}
+                percent={s.percent}
+              />
+            </div>
+          ))}
+        </>
       )}
 
-      {/* Add / Edit Dialog */}
       <Dialog open={formOpen} onOpenChange={setFormOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>
-              {editingEntry ? "Edit Income Entry" : "Add Income Entry"}
+              {editing ? "Edit Income Entry" : "Add Income Entry"}
             </DialogTitle>
             <DialogDescription>
-              {editingEntry
+              {editing
                 ? "Update the details of this income entry."
                 : "Fill in the details to record a new income entry."}
             </DialogDescription>
           </DialogHeader>
           <IncomeForm
-            key={editingEntry?.id ?? "new"}
-            entry={editingEntry}
-            onSuccess={handleFormSuccess}
-            onCancel={handleFormCancel}
+            key={editing?.id ?? "new"}
+            entry={editing}
+            onSuccess={() => {
+              setFormOpen(false);
+              setEditing(undefined);
+              fetchEntries();
+            }}
+            onCancel={() => {
+              setFormOpen(false);
+              setEditing(undefined);
+            }}
           />
         </DialogContent>
       </Dialog>
 
-      {/* Delete Confirmation Dialog */}
       <Dialog
         open={!!deleteTarget}
-        onOpenChange={(open) => {
-          if (!open) setDeleteTarget(null);
-        }}
+        onOpenChange={(open) => !open && setDeleteTarget(null)}
       >
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
             <DialogTitle>Delete Income Entry</DialogTitle>
             <DialogDescription>
-              Are you sure you want to delete the entry &quot;
-              {deleteTarget?.source_name}&quot; for{" "}
-              {deleteTarget ? formatCurrency(deleteTarget.amount) : ""}? This
-              action cannot be undone.
+              Delete &ldquo;{deleteTarget?.source_name}&rdquo; for{" "}
+              {deleteTarget ? formatINR(deleteTarget.amount) : ""}? This cannot
+              be undone.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

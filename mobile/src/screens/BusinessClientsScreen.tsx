@@ -3,20 +3,27 @@ import {
   View,
   Text,
   StyleSheet,
-  FlatList,
+  ScrollView,
   RefreshControl,
   ActivityIndicator,
-  TouchableOpacity,
+  Pressable,
   Alert,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import Svg, { Path } from "react-native-svg";
 import { supabase } from "../lib/supabase";
 import { useSyncStore } from "../lib/sync-store";
-import { formatCurrency } from "../lib/format";
 import {
   CLIENT_STATUSES,
   ENGAGEMENT_TYPES,
 } from "../lib/business-constants";
+import { useTheme } from "../lib/theme-context";
+import { text as typography } from "../lib/typography";
+import { radii, navHeight } from "../lib/radii";
+import { PageHeader } from "../components/PageHeader";
+import { formatINR } from "../components/komal";
+import type { ThemeColors } from "../lib/colors";
 import type { BusinessClient } from "../types/business";
 
 function getStatusLabel(value: string): string {
@@ -28,23 +35,25 @@ function getEngagementLabel(value: string | null): string {
   return ENGAGEMENT_TYPES.find((e) => e.value === value)?.label ?? value;
 }
 
-function getStatusColor(status: string): string {
+function getStatusColor(status: string, colors: ThemeColors): string {
   switch (status) {
     case "active":
-      return "#10b981";
+      return colors.income;
     case "prospect":
-      return "#3b82f6";
+      return colors.blue;
     case "paused":
-      return "#f59e0b";
+      return colors.warning;
     case "churned":
-      return "#ef4444";
+      return colors.expense;
     default:
-      return "#6b7280";
+      return colors.textSecondary;
   }
 }
 
 export function BusinessClientsScreen() {
   const navigation = useNavigation<any>();
+  const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
   const syncVersion = useSyncStore((s) => s.syncVersion);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -117,195 +126,219 @@ export function BusinessClientsScreen() {
     [fetchData, navigation]
   );
 
-  const renderItem = ({ item }: { item: BusinessClient }) => {
-    const statusColor = getStatusColor(item.status);
-    return (
-      <TouchableOpacity
-        style={styles.entryRow}
-        onLongPress={() => handleLongPress(item)}
-        activeOpacity={0.7}
-      >
-        <View style={styles.entryLeft}>
-          <Text style={styles.entryName} numberOfLines={1}>
-            {item.name}
-          </Text>
-          <View style={styles.entryMeta}>
-            <View style={[styles.statusBadge, { backgroundColor: statusColor + "20" }]}>
-              <Text style={[styles.statusText, { color: statusColor }]}>
-                {getStatusLabel(item.status)}
-              </Text>
-            </View>
-            {item.engagement_type && (
-              <Text style={styles.engagementType}>
-                {getEngagementLabel(item.engagement_type)}
-              </Text>
-            )}
-          </View>
-          <View style={styles.detailRow}>
-            {item.industry && (
-              <Text style={styles.detailText}>{item.industry}</Text>
-            )}
-            {item.country && (
-              <Text style={styles.detailText}>{item.country}</Text>
-            )}
-          </View>
-        </View>
-        {item.monthly_value != null && item.monthly_value > 0 && (
-          <Text style={styles.monthlyValue}>
-            {formatCurrency(item.monthly_value)}/mo
-          </Text>
-        )}
-      </TouchableOpacity>
-    );
-  };
-
   if (loading) {
     return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#185FA5" />
+      <View style={[styles.centered, { backgroundColor: colors.bg }]}>
+        <ActivityIndicator size="large" color={colors.accent} />
       </View>
     );
   }
 
   return (
-    <View style={styles.screen}>
-      <FlatList
-        data={entries}
-        keyExtractor={(item) => item.id}
-        renderItem={renderItem}
-        contentContainerStyle={styles.listContent}
+    <View style={{ flex: 1, backgroundColor: colors.bg }}>
+      <ScrollView
+        contentContainerStyle={{
+          paddingBottom: navHeight + 40 + insets.bottom,
+        }}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
-            tintColor="#185FA5"
+            tintColor={colors.accent}
           />
         }
-        ListEmptyComponent={
+      >
+        <PageHeader
+          title="Clients"
+          actions={
+            <Pressable
+              onPress={() => navigation.navigate("AddBusinessClient")}
+              style={({ pressed }) => [
+                styles.iconBtn,
+                {
+                  backgroundColor: colors.surface,
+                  borderColor: colors.border,
+                  transform: [{ scale: pressed ? 0.97 : 1 }],
+                },
+              ]}
+            >
+              <Svg
+                width={18}
+                height={18}
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke={colors.textPrimary}
+                strokeWidth={1.8}
+                strokeLinecap="round"
+              >
+                <Path d="M12 5v14M5 12h14" />
+              </Svg>
+            </Pressable>
+          }
+        />
+
+        {entries.length === 0 ? (
           <View style={styles.emptyState}>
-            <Text style={styles.emptyText}>No clients tracked yet.</Text>
-            <Text style={styles.emptyHint}>
+            <Text
+              style={[
+                typography.caption,
+                { color: colors.textSecondary, marginBottom: 4 },
+              ]}
+            >
+              No clients tracked yet.
+            </Text>
+            <Text
+              style={[typography.caption, { color: colors.textTertiary }]}
+            >
               Tap the + button to add your first client.
             </Text>
           </View>
-        }
-      />
-
-      {/* FAB */}
-      <TouchableOpacity
-        style={styles.fab}
-        onPress={() => navigation.navigate("AddBusinessClient")}
-        activeOpacity={0.8}
-      >
-        <Text style={styles.fabText}>+</Text>
-      </TouchableOpacity>
+        ) : (
+          entries.map((item) => {
+            const statusColor = getStatusColor(item.status, colors);
+            return (
+              <Pressable
+                key={item.id}
+                onLongPress={() => handleLongPress(item)}
+                style={({ pressed }) => [
+                  styles.entryRow,
+                  {
+                    backgroundColor: colors.surface,
+                    borderColor: colors.border,
+                    transform: [{ scale: pressed ? 0.97 : 1 }],
+                  },
+                ]}
+              >
+                <View style={{ flex: 1, marginRight: 8 }}>
+                  <Text
+                    numberOfLines={1}
+                    style={[
+                      typography.body,
+                      {
+                        color: colors.textPrimary,
+                        fontWeight: "600",
+                        marginBottom: 6,
+                      },
+                    ]}
+                  >
+                    {item.name}
+                  </Text>
+                  <View style={styles.entryMeta}>
+                    <View
+                      style={[
+                        styles.pill,
+                        { backgroundColor: colors.surfaceAlt },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.pillText,
+                          { color: statusColor },
+                        ]}
+                      >
+                        {getStatusLabel(item.status)}
+                      </Text>
+                    </View>
+                    {item.engagement_type ? (
+                      <Text
+                        style={[
+                          typography.caption,
+                          { color: colors.textTertiary },
+                        ]}
+                      >
+                        {getEngagementLabel(item.engagement_type)}
+                      </Text>
+                    ) : null}
+                  </View>
+                  <View style={styles.detailRow}>
+                    {item.industry ? (
+                      <Text
+                        style={[
+                          typography.caption,
+                          { color: colors.textTertiary },
+                        ]}
+                      >
+                        {item.industry}
+                      </Text>
+                    ) : null}
+                    {item.country ? (
+                      <Text
+                        style={[
+                          typography.caption,
+                          { color: colors.textTertiary },
+                        ]}
+                      >
+                        {item.country}
+                      </Text>
+                    ) : null}
+                  </View>
+                </View>
+                {item.monthly_value != null && item.monthly_value > 0 ? (
+                  <Text
+                    style={[
+                      typography.body,
+                      { color: colors.income, fontWeight: "700" },
+                    ]}
+                  >
+                    {formatINR(item.monthly_value)}/mo
+                  </Text>
+                ) : null}
+              </Pressable>
+            );
+          })
+        )}
+      </ScrollView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: "#f8fafc",
-  },
   centered: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#f8fafc",
   },
-  listContent: {
-    padding: 16,
-    paddingBottom: 100,
+  iconBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 100,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
   },
   entryRow: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#fff",
-    borderRadius: 12,
+    borderRadius: radii.sm,
+    borderWidth: 1,
     padding: 14,
-    marginBottom: 10,
-    elevation: 2,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-  },
-  entryLeft: {
-    flex: 1,
-    marginRight: 8,
-  },
-  entryName: {
-    fontSize: 15,
-    fontWeight: "600",
-    color: "#1f2937",
-    marginBottom: 4,
+    marginHorizontal: 24,
+    marginBottom: 8,
   },
   entryMeta: {
     flexDirection: "row",
+    flexWrap: "wrap",
     alignItems: "center",
     gap: 8,
     marginBottom: 4,
   },
-  statusBadge: {
+  pill: {
     paddingHorizontal: 8,
     paddingVertical: 2,
-    borderRadius: 10,
+    borderRadius: 100,
   },
-  statusText: {
+  pillText: {
     fontSize: 11,
     fontWeight: "600",
   },
-  engagementType: {
-    fontSize: 11,
-    color: "#6b7280",
-  },
   detailRow: {
     flexDirection: "row",
+    flexWrap: "wrap",
     gap: 12,
-  },
-  detailText: {
-    fontSize: 12,
-    color: "#6b7280",
-  },
-  monthlyValue: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: "#10b981",
   },
   emptyState: {
     alignItems: "center",
     paddingVertical: 48,
-  },
-  emptyText: {
-    fontSize: 15,
-    color: "#6b7280",
-    marginBottom: 4,
-  },
-  emptyHint: {
-    fontSize: 13,
-    color: "#9ca3af",
-  },
-  fab: {
-    position: "absolute",
-    bottom: 24,
-    right: 24,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: "#185FA5",
-    justifyContent: "center",
-    alignItems: "center",
-    elevation: 6,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-  },
-  fabText: {
-    fontSize: 28,
-    color: "#fff",
-    fontWeight: "300",
-    marginTop: -2,
+    marginHorizontal: 24,
   },
 });

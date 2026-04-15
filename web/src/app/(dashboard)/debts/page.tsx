@@ -72,6 +72,7 @@ import {
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 
+import { PageHeader } from "@/components/layout/PageHeader";
 import { DebtForm } from "@/components/forms/debt-form";
 import { DebtPaymentForm } from "@/components/forms/debt-payment-form";
 import { DebtAllocationForm } from "@/components/forms/debt-allocation-form";
@@ -556,14 +557,13 @@ export default function DebtsPage() {
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <CreditCard className="size-6 text-primary" />
-          <h2 className="text-2xl font-bold tracking-tight">Debt Tracker</h2>
-        </div>
-
+    <div className="flex flex-col">
+      <div className="animate d1">
+        <PageHeader title="Debts" />
+      </div>
+      <div className="px-6 space-y-6">
+      {/* Actions row */}
+      <div className="flex items-center justify-end">
         <DropdownMenu>
           <DropdownMenuTrigger
             render={
@@ -1551,6 +1551,7 @@ export default function DebtsPage() {
           onSaved={handleCcStatementSaved}
         />
       )}
+      </div>
     </div>
   );
 }

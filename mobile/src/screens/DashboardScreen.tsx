@@ -2,27 +2,41 @@ import React, { useCallback, useEffect, useState } from "react";
 import {
   View,
   Text,
-  StyleSheet,
   ScrollView,
   RefreshControl,
   ActivityIndicator,
-  TouchableOpacity,
+  Pressable,
+  StyleSheet,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import Svg, { Path } from "react-native-svg";
 import { supabase } from "../lib/supabase";
 import { useSyncStore } from "../lib/sync-store";
-import { formatCurrency, formatDate } from "../lib/format";
 import { INCOME_CATEGORIES, EXPENSE_CATEGORIES } from "../lib/constants";
-import { BudgetAlert } from "../components/BudgetAlert";
+import { useTheme } from "../lib/theme-context";
+import { text as typography } from "../lib/typography";
+import { navHeight } from "../lib/radii";
+import {
+  HeroBalanceCard,
+  QuickActionBar,
+  StatPillRow,
+  SectionHeader,
+  TransactionCard,
+  formatINR,
+} from "../components/komal";
 import type { IncomeEntry, ExpenseEntry, SavingsGoal } from "../types/database";
+import { format } from "date-fns";
 
 type Transaction = {
   id: string;
-  type: "income" | "expense";
+  kind: "income" | "expense";
   description: string;
   category: string;
   date: string;
   amount: number;
+  method?: string | null;
 };
 
 function getCategoryLabel(
@@ -33,18 +47,49 @@ function getCategoryLabel(
   return list.find((c) => c.value === value)?.label ?? value;
 }
 
+function mapExpenseCategory(cat: string): string {
+  switch (cat) {
+    case "food_groceries":
+      return "food";
+    case "credit_card_payments":
+      return "credit_card";
+    case "emis":
+      return "emi";
+    case "family_personal":
+      return "family";
+    case "debt_repayment":
+      return "credit_card";
+    default:
+      return cat;
+  }
+}
+
+type NavProp = NativeStackNavigationProp<Record<string, object | undefined>>;
+
 export function DashboardScreen() {
-  const navigation = useNavigation<any>();
+  const navigation = useNavigation<NavProp>();
+  const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
   const syncVersion = useSyncStore((s) => s.syncVersion);
+
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [totalIncome, setTotalIncome] = useState(0);
   const [totalExpenses, setTotalExpenses] = useState(0);
   const [totalSavings, setTotalSavings] = useState(0);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [userName, setUserName] = useState<string>("there");
 
   const fetchData = useCallback(async () => {
     try {
+      const { data: userData } = await supabase.auth.getUser();
+      const displayName =
+        (userData?.user?.user_metadata?.full_name as string | undefined) ||
+        (userData?.user?.user_metadata?.name as string | undefined) ||
+        userData?.user?.email?.split("@")[0] ||
+        "there";
+      setUserName(displayName);
+
       const now = new Date();
       const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
         .toISOString()
@@ -76,36 +121,34 @@ export function DashboardScreen() {
       const expenseData: ExpenseEntry[] = expenseRes.data ?? [];
       const goalsData: SavingsGoal[] = goalsRes.data ?? [];
 
-      const incomeTotal = incomeData.reduce((s, i) => s + i.amount, 0);
-      const expenseTotal = expenseData.reduce((s, e) => s + e.amount, 0);
-      const savingsTotal = goalsData.reduce((s, g) => s + g.current_balance, 0);
-
-      setTotalIncome(incomeTotal);
-      setTotalExpenses(expenseTotal);
-      setTotalSavings(savingsTotal);
+      setTotalIncome(incomeData.reduce((s, i) => s + i.amount, 0));
+      setTotalExpenses(expenseData.reduce((s, e) => s + e.amount, 0));
+      setTotalSavings(goalsData.reduce((s, g) => s + g.current_balance, 0));
 
       const merged: Transaction[] = [
         ...incomeData.map((i) => ({
           id: i.id,
-          type: "income" as const,
+          kind: "income" as const,
           description: i.source_name,
           category: i.category,
           date: i.date,
           amount: i.amount,
+          method: i.payment_method,
         })),
         ...expenseData.map((e) => ({
           id: e.id,
-          type: "expense" as const,
+          kind: "expense" as const,
           description: e.payee_name ?? "Expense",
-          category: e.category,
+          category: mapExpenseCategory(e.category),
           date: e.date,
           amount: e.amount,
+          method: e.payment_method,
         })),
       ];
       merged.sort(
         (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
       );
-      setTransactions(merged.slice(0, 10));
+      setTransactions(merged.slice(0, 6));
     } catch (err) {
       console.error("Dashboard fetch error:", err);
     } finally {
@@ -125,8 +168,8 @@ export function DashboardScreen() {
 
   if (loading) {
     return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#0d9488" />
+      <View style={[styles.centered, { backgroundColor: colors.bg }]}>
+        <ActivityIndicator size="large" color={colors.accent} />
       </View>
     );
   }
@@ -135,142 +178,139 @@ export function DashboardScreen() {
 
   return (
     <ScrollView
-      style={styles.screen}
-      contentContainerStyle={styles.content}
+      style={{ flex: 1, backgroundColor: colors.bg }}
+      contentContainerStyle={{
+        paddingBottom: navHeight + 40 + insets.bottom,
+      }}
       refreshControl={
         <RefreshControl
           refreshing={refreshing}
           onRefresh={onRefresh}
-          tintColor="#0d9488"
+          tintColor={colors.accent}
         />
       }
     >
-      {/* Summary Cards */}
-      <View style={styles.cardGrid}>
-        <View style={[styles.card, { borderLeftColor: "#22c55e" }]}>
-          <Text style={styles.cardIcon}>💰</Text>
-          <Text style={styles.cardTitle}>Total Income</Text>
-          <Text style={[styles.cardAmount, { color: "#22c55e" }]}>
-            {formatCurrency(totalIncome)}
+      <View
+        style={[styles.header, { paddingTop: insets.top + 16 }]}
+      >
+        <View>
+          <Text style={[typography.caption, { color: colors.textSecondary }]}>
+            Hi,
           </Text>
-        </View>
-        <View style={[styles.card, { borderLeftColor: "#f87171" }]}>
-          <Text style={styles.cardIcon}>💸</Text>
-          <Text style={styles.cardTitle}>Total Expenses</Text>
-          <Text style={[styles.cardAmount, { color: "#f87171" }]}>
-            {formatCurrency(totalExpenses)}
-          </Text>
-        </View>
-        <View
-          style={[
-            styles.card,
-            { borderLeftColor: netCashFlow >= 0 ? "#0d9488" : "#f87171" },
-          ]}
-        >
-          <Text style={styles.cardIcon}>📊</Text>
-          <Text style={styles.cardTitle}>Net Cash Flow</Text>
           <Text
             style={[
-              styles.cardAmount,
-              { color: netCashFlow >= 0 ? "#0d9488" : "#f87171" },
+              typography.greetingName,
+              { color: colors.textPrimary, marginTop: 2 },
             ]}
           >
-            {formatCurrency(netCashFlow)}
+            {userName}
           </Text>
         </View>
-        <View style={[styles.card, { borderLeftColor: "#f59e0b" }]}>
-          <Text style={styles.cardIcon}>🐷</Text>
-          <Text style={styles.cardTitle}>Savings</Text>
-          <Text style={[styles.cardAmount, { color: "#f59e0b" }]}>
-            {formatCurrency(totalSavings)}
-          </Text>
+        <View style={{ flexDirection: "row", gap: 8 }}>
+          <Pressable
+            onPress={() => navigation.navigate("Settings" as never)}
+            style={({ pressed }) => [
+              styles.iconBtn,
+              {
+                backgroundColor: colors.surface,
+                borderColor: colors.border,
+                transform: [{ scale: pressed ? 0.94 : 1 }],
+              },
+            ]}
+          >
+            <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={colors.textPrimary} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+              <Path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" />
+              <Path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9c.2.61.78 1 1.51 1H21a2 2 0 0 1 0 4h-.09c-.73 0-1.31.39-1.51 1Z" />
+            </Svg>
+          </Pressable>
         </View>
       </View>
 
-      {/* Budget Alerts */}
-      <BudgetAlert />
+      <HeroBalanceCard
+        netAmount={netCashFlow}
+        income={totalIncome}
+        expense={totalExpenses}
+      />
 
-      {/* Import Transactions Card */}
-      <TouchableOpacity
-        style={styles.importCard}
-        onPress={() => navigation.navigate("Imports")}
-        activeOpacity={0.7}
-      >
-        <Text style={styles.importIcon}>📥</Text>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.importTitle}>Import Transactions</Text>
-          <Text style={styles.importDesc}>
-            Scan SMS or upload bank statements
-          </Text>
-        </View>
-        <Text style={styles.importArrow}>→</Text>
-      </TouchableOpacity>
+      <QuickActionBar
+        actions={[
+          {
+            label: "Import",
+            onPress: () => navigation.navigate("Imports" as never),
+            icon: (
+              <Svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke={colors.accent} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                <Path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <Path d="m7 10 5 5 5-5M12 15V3" />
+              </Svg>
+            ),
+          },
+          {
+            label: "Scan SMS",
+            onPress: () => navigation.navigate("SmsScan" as never),
+            icon: (
+              <Svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke={colors.accent} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                <Path d="M7 2h10a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2Z" />
+                <Path d="M12 18h.01" />
+              </Svg>
+            ),
+          },
+          {
+            label: "Analytics",
+            onPress: () => navigation.navigate("Analytics" as never),
+            icon: (
+              <Svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke={colors.accent} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                <Path d="M4 20V10M10 20V4M16 20v-8M22 20H2" />
+              </Svg>
+            ),
+          },
+        ]}
+      />
 
-      {/* Recent Transactions */}
-      <Text style={styles.sectionTitle}>Recent Transactions</Text>
+      <StatPillRow
+        stats={[
+          {
+            label: "Savings",
+            value: formatINR(totalSavings),
+            tone: totalSavings === 0 ? "zero" : "default",
+          },
+          {
+            label: "This Month",
+            value: formatINR(Math.abs(netCashFlow)),
+            tone: netCashFlow < 0 ? "negative" : "default",
+          },
+        ]}
+      />
+
+      <SectionHeader
+        title="Recent"
+        linkLabel="View All"
+        onLinkPress={() => navigation.navigate("Expenses" as never)}
+      />
+
       {transactions.length === 0 ? (
-        <View style={styles.emptyState}>
-          <Text style={styles.emptyText}>
-            No transactions this month yet.
-          </Text>
-        </View>
+        <Text
+          style={{
+            color: colors.textSecondary,
+            textAlign: "center",
+            marginHorizontal: 24,
+            marginVertical: 24,
+            fontFamily: typography.caption.fontFamily,
+            fontSize: 13,
+          }}
+        >
+          No transactions this month yet. Tap + to add one.
+        </Text>
       ) : (
-        transactions.map((txn) => (
-          <View key={txn.id} style={styles.txnRow}>
-            <View
-              style={[
-                styles.txnIndicator,
-                {
-                  backgroundColor:
-                    txn.type === "income" ? "#dcfce7" : "#fee2e2",
-                },
-              ]}
-            >
-              <Text style={styles.txnIndicatorText}>
-                {txn.type === "income" ? "+" : "-"}
-              </Text>
-            </View>
-            <View style={styles.txnDetails}>
-              <Text style={styles.txnDescription} numberOfLines={1}>
-                {txn.description}
-              </Text>
-              <View style={styles.txnMeta}>
-                <View
-                  style={[
-                    styles.badge,
-                    {
-                      backgroundColor:
-                        txn.type === "income" ? "#dcfce7" : "#fee2e2",
-                    },
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.badgeText,
-                      {
-                        color:
-                          txn.type === "income" ? "#16a34a" : "#dc2626",
-                      },
-                    ]}
-                  >
-                    {getCategoryLabel(txn.category, txn.type)}
-                  </Text>
-                </View>
-                <Text style={styles.txnDate}>{formatDate(txn.date)}</Text>
-              </View>
-            </View>
-            <Text
-              style={[
-                styles.txnAmount,
-                {
-                  color: txn.type === "income" ? "#22c55e" : "#f87171",
-                },
-              ]}
-            >
-              {txn.type === "income" ? "+" : "-"}
-              {formatCurrency(txn.amount)}
-            </Text>
-          </View>
+        transactions.map((tx) => (
+          <TransactionCard
+            key={`${tx.kind}-${tx.id}`}
+            name={tx.description}
+            kind={tx.kind}
+            category={tx.category}
+            categoryLabel={getCategoryLabel(tx.category, tx.kind)}
+            date={format(new Date(tx.date), "d MMM")}
+            amount={tx.amount}
+          />
         ))
       )}
     </ScrollView>
@@ -278,147 +318,24 @@ export function DashboardScreen() {
 }
 
 const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: "#fff",
-  },
-  content: {
-    padding: 16,
-    paddingBottom: 32,
-  },
   centered: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#fff",
   },
-  cardGrid: {
+  header: {
     flexDirection: "row",
-    flexWrap: "wrap",
+    alignItems: "center",
     justifyContent: "space-between",
-    gap: 12,
-    marginBottom: 24,
+    paddingHorizontal: 24,
+    paddingBottom: 20,
   },
-  card: {
-    width: "48%",
-    backgroundColor: "#f3f4f6",
-    borderRadius: 12,
-    padding: 16,
-    borderLeftWidth: 4,
-    elevation: 2,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-  },
-  cardIcon: {
-    fontSize: 24,
-    marginBottom: 4,
-  },
-  cardTitle: {
-    fontSize: 12,
-    color: "#6b7280",
-    marginBottom: 4,
-    fontWeight: "500",
-  },
-  cardAmount: {
-    fontSize: 18,
-    fontWeight: "700",
-  },
-  importCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#f0fdfa",
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 20,
+  iconBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 100,
     borderWidth: 1,
-    borderColor: "#99f6e4",
-  },
-  importIcon: {
-    fontSize: 24,
-    marginRight: 12,
-  },
-  importTitle: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#0d9488",
-  },
-  importDesc: {
-    fontSize: 12,
-    color: "#6b7280",
-    marginTop: 2,
-  },
-  importArrow: {
-    fontSize: 18,
-    color: "#0d9488",
-    fontWeight: "600",
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#1f2937",
-    marginBottom: 12,
-  },
-  emptyState: {
     alignItems: "center",
-    paddingVertical: 32,
-  },
-  emptyText: {
-    fontSize: 14,
-    color: "#6b7280",
-  },
-  txnRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#f3f4f6",
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 8,
-  },
-  txnIndicator: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
     justifyContent: "center",
-    alignItems: "center",
-    marginRight: 12,
-  },
-  txnIndicatorText: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: "#1f2937",
-  },
-  txnDetails: {
-    flex: 1,
-    marginRight: 8,
-  },
-  txnDescription: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#1f2937",
-    marginBottom: 4,
-  },
-  txnMeta: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  badge: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 10,
-  },
-  badgeText: {
-    fontSize: 11,
-    fontWeight: "600",
-  },
-  txnDate: {
-    fontSize: 12,
-    color: "#6b7280",
-  },
-  txnAmount: {
-    fontSize: 14,
-    fontWeight: "700",
   },
 });

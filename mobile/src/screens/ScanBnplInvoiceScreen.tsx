@@ -5,11 +5,18 @@ import {
   StyleSheet,
   ScrollView,
   TextInput,
-  TouchableOpacity,
+  Pressable,
   Alert,
   ActivityIndicator,
 } from "react-native";
 import { supabase } from "../lib/supabase";
+import { useTheme } from "../lib/theme-context";
+import { text as typography, fonts } from "../lib/typography";
+import { radii, navHeight } from "../lib/radii";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { PageHeader } from "../components/PageHeader";
+import { formatINR, TransactionCard } from "../components/komal";
+import type { ThemeColors } from "../lib/colors";
 
 /**
  * Scan BNPL Invoice — mobile equivalent of the web "Add from Invoice" flow.
@@ -54,6 +61,8 @@ interface BnplPlatform {
 }
 
 export function ScanBnplInvoiceScreen({ navigation }: any) {
+  const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
   const [orderFile, setOrderFile] = useState<PickedFile | null>(null);
   const [emiFile, setEmiFile] = useState<PickedFile | null>(null);
   const [parsing, setParsing] = useState(false);
@@ -106,13 +115,23 @@ export function ScanBnplInvoiceScreen({ navigation }: any) {
     setItemName(data.item_name ?? "");
     setOrderId(data.order_id ?? "");
     setMerchant(data.merchant_name ?? "");
-    setTotalAmount(data.total_amount != null ? String(data.total_amount) : "");
-    setDownPayment(data.down_payment != null ? String(data.down_payment) : "0");
-    setInterestRate(data.interest_rate != null ? String(data.interest_rate) : "0");
+    setTotalAmount(
+      data.total_amount != null ? String(data.total_amount) : ""
+    );
+    setDownPayment(
+      data.down_payment != null ? String(data.down_payment) : "0"
+    );
+    setInterestRate(
+      data.interest_rate != null ? String(data.interest_rate) : "0"
+    );
     setRateType(data.interest_rate_type ?? "per_annum");
-    setProcessingFee(data.processing_fee != null ? String(data.processing_fee) : "0");
+    setProcessingFee(
+      data.processing_fee != null ? String(data.processing_fee) : "0"
+    );
     setTotalEmis(data.total_emis != null ? String(data.total_emis) : "");
-    setEmiDay(data.emi_day_of_month != null ? String(data.emi_day_of_month) : "");
+    setEmiDay(
+      data.emi_day_of_month != null ? String(data.emi_day_of_month) : ""
+    );
     setPurchaseDate(data.purchase_date ?? "");
     setFirstEmiDate(data.first_emi_date ?? "");
     setCategory(data.item_category ?? "other");
@@ -196,7 +215,10 @@ export function ScanBnplInvoiceScreen({ navigation }: any) {
       applyParsed(json.data as ParsedInvoiceData);
 
       if ((json.data as ParsedInvoiceData).warnings?.length > 0) {
-        Alert.alert("Review required", (json.data as ParsedInvoiceData).warnings.join("\n"));
+        Alert.alert(
+          "Review required",
+          (json.data as ParsedInvoiceData).warnings.join("\n")
+        );
       }
     } catch (err: any) {
       Alert.alert("Error", err?.message ?? "Failed to parse invoice");
@@ -226,7 +248,10 @@ export function ScanBnplInvoiceScreen({ navigation }: any) {
 
     const { error } = await supabase.storage
       .from("bnpl-invoices")
-      .upload(path, arrayBuffer, { contentType: file.mimeType, upsert: false });
+      .upload(path, arrayBuffer, {
+        contentType: file.mimeType,
+        upsert: false,
+      });
 
     if (error) {
       console.error("Upload failed:", error);
@@ -293,7 +318,9 @@ export function ScanBnplInvoiceScreen({ navigation }: any) {
       const fee = parseFloat(processingFee) || 0;
       const financed = Math.max(0, total - dp);
       const totalInterest =
-        rateType === "per_annum" ? (financed * rate * emis) / (12 * 100) : (financed * rate) / 100;
+        rateType === "per_annum"
+          ? (financed * rate * emis) / (12 * 100)
+          : (financed * rate) / 100;
       const totalPayable = financed + totalInterest + fee;
       const emiAmount = emis > 0 ? totalPayable / emis : 0;
 
@@ -329,7 +356,8 @@ export function ScanBnplInvoiceScreen({ navigation }: any) {
         return;
       }
 
-      const purchaseId = (rpcData as { purchase_id?: string } | null)?.purchase_id;
+      const purchaseId = (rpcData as { purchase_id?: string } | null)
+        ?.purchase_id;
 
       // Upload invoice files in the background
       if (purchaseId) {
@@ -339,7 +367,11 @@ export function ScanBnplInvoiceScreen({ navigation }: any) {
           if (meta) uploaded.push(meta);
         }
         if (emiFile) {
-          const meta = await uploadFile(emiFile, purchaseId, "emi_confirmation");
+          const meta = await uploadFile(
+            emiFile,
+            purchaseId,
+            "emi_confirmation"
+          );
           if (meta) uploaded.push(meta);
         }
         if (uploaded.length > 0) {
@@ -361,136 +393,423 @@ export function ScanBnplInvoiceScreen({ navigation }: any) {
   };
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Text style={styles.title}>Scan BNPL Invoice</Text>
-      <Text style={styles.subtitle}>
-        Upload your BNPL order invoice and we&apos;ll extract the details automatically.
-      </Text>
-
-      {/* Order file picker */}
-      <View style={styles.section}>
-        <Text style={styles.sectionLabel}>Order Invoice *</Text>
-        <TouchableOpacity
-          style={[styles.fileDropzone, orderFile && styles.fileDropzoneFilled]}
-          onPress={() => pickFile("order")}
+    <View style={{ flex: 1, backgroundColor: colors.bg }}>
+      <PageHeader title="Scan Invoice" eyebrow="BNPL invoice OCR" />
+      <ScrollView
+        contentContainerStyle={{
+          paddingBottom: navHeight + 40 + insets.bottom,
+          paddingHorizontal: 24,
+        }}
+      >
+        <Text
+          style={[
+            typography.caption,
+            { color: colors.textSecondary, marginBottom: 20 },
+          ]}
         >
-          {orderFile ? (
-            <Text style={styles.fileName} numberOfLines={1}>
-              📄 {orderFile.name}
-            </Text>
-          ) : (
-            <Text style={styles.fileHint}>Tap to pick order PDF / image</Text>
-          )}
-        </TouchableOpacity>
-      </View>
+          Upload your BNPL order invoice and we&apos;ll extract the details
+          automatically.
+        </Text>
 
-      {/* EMI file picker */}
-      <View style={styles.section}>
-        <Text style={styles.sectionLabel}>EMI Confirmation (optional)</Text>
-        <TouchableOpacity
-          style={[styles.fileDropzone, emiFile && styles.fileDropzoneFilled]}
-          onPress={() => pickFile("emi")}
-        >
-          {emiFile ? (
-            <Text style={styles.fileName} numberOfLines={1}>
-              🧾 {emiFile.name}
-            </Text>
-          ) : (
-            <Text style={styles.fileHint}>Screenshot of Pay Later tenure</Text>
-          )}
-        </TouchableOpacity>
-      </View>
-
-      {/* Parse button */}
-      {!parsed && (
-        <TouchableOpacity
-          style={[styles.primaryBtn, (!orderFile || parsing) && styles.primaryBtnDisabled]}
-          onPress={handleParse}
-          disabled={!orderFile || parsing}
-        >
-          {parsing ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={styles.primaryBtnText}>✨ Parse Invoice</Text>
-          )}
-        </TouchableOpacity>
-      )}
-
-      {/* Review fields — shown after parsing */}
-      {parsed && (
-        <View style={styles.reviewSection}>
-          <Text style={styles.reviewTitle}>Review & Edit</Text>
-
-          {parsed.warnings.length > 0 && (
-            <View style={styles.warningBox}>
-              <Text style={styles.warningTitle}>⚠ Please verify:</Text>
-              {parsed.warnings.map((w, i) => (
-                <Text key={i} style={styles.warningText}>• {w}</Text>
-              ))}
-            </View>
-          )}
-
-          <LabeledInput label="Platform" value={platforms.find((p) => p.id === platformId)?.name ?? ""} onChangeText={() => {}} editable={false} />
-          {platforms.length > 1 && (
-            <View style={styles.platformRow}>
-              {platforms.map((p) => (
-                <TouchableOpacity
-                  key={p.id}
-                  style={[styles.platformChip, platformId === p.id && styles.platformChipActive]}
-                  onPress={() => setPlatformId(p.id)}
-                >
-                  <Text
-                    style={[styles.platformChipText, platformId === p.id && styles.platformChipTextActive]}
-                  >
-                    {p.name}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          )}
-
-          <LabeledInput label="Item Name" value={itemName} onChangeText={setItemName} />
-          <LabeledInput label="Order ID" value={orderId} onChangeText={setOrderId} />
-          <LabeledInput label="Merchant" value={merchant} onChangeText={setMerchant} />
-          <LabeledInput label="Total Price (₹)" value={totalAmount} onChangeText={setTotalAmount} keyboardType="numeric" />
-          <LabeledInput label="Down Payment (₹)" value={downPayment} onChangeText={setDownPayment} keyboardType="numeric" />
-          <LabeledInput label="Interest Rate (%)" value={interestRate} onChangeText={setInterestRate} keyboardType="numeric" />
-
-          <View style={styles.rateTypeRow}>
-            <TouchableOpacity
-              style={[styles.rateChip, rateType === "per_annum" && styles.rateChipActive]}
-              onPress={() => setRateType("per_annum")}
-            >
-              <Text style={[styles.rateChipText, rateType === "per_annum" && styles.rateChipTextActive]}>
-                Per Annum
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.rateChip, rateType === "flat" && styles.rateChipActive]}
-              onPress={() => setRateType("flat")}
-            >
-              <Text style={[styles.rateChipText, rateType === "flat" && styles.rateChipTextActive]}>
-                Flat
-              </Text>
-            </TouchableOpacity>
-          </View>
-
-          <LabeledInput label="Processing Fee (₹)" value={processingFee} onChangeText={setProcessingFee} keyboardType="numeric" />
-          <LabeledInput label="Number of EMIs" value={totalEmis} onChangeText={setTotalEmis} keyboardType="numeric" />
-          <LabeledInput label="EMI Day (1-31)" value={emiDay} onChangeText={setEmiDay} keyboardType="numeric" />
-          <LabeledInput label="Purchase Date (YYYY-MM-DD)" value={purchaseDate} onChangeText={setPurchaseDate} />
-          <LabeledInput label="First EMI Date (YYYY-MM-DD)" value={firstEmiDate} onChangeText={setFirstEmiDate} />
-
-          <TouchableOpacity
-            style={[styles.primaryBtn, saving && styles.primaryBtnDisabled]}
-            onPress={handleSave}
-            disabled={saving}
+        {/* Order file picker */}
+        <View style={{ marginBottom: 14 }}>
+          <Text
+            style={{
+              fontFamily: fonts.sansMedium,
+              fontSize: 13,
+              color: colors.textPrimary,
+              marginBottom: 8,
+            }}
           >
-            {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>Save Purchase</Text>}
-          </TouchableOpacity>
+            Order Invoice *
+          </Text>
+          <Pressable
+            onPress={() => pickFile("order")}
+            style={({ pressed }) => [
+              {
+                borderWidth: 1,
+                borderStyle: "dashed",
+                borderColor: orderFile ? colors.accent : colors.border,
+                backgroundColor: orderFile
+                  ? colors.accentLight
+                  : colors.surface,
+                borderRadius: 12,
+                padding: 20,
+                alignItems: "center",
+                transform: [{ scale: pressed ? 0.97 : 1 }],
+              },
+            ]}
+          >
+            {orderFile ? (
+              <Text
+                numberOfLines={1}
+                style={{
+                  fontFamily: fonts.sansMedium,
+                  fontSize: 13,
+                  color: colors.accent,
+                }}
+              >
+                📄 {orderFile.name}
+              </Text>
+            ) : (
+              <Text
+                style={{
+                  fontFamily: fonts.sans,
+                  fontSize: 13,
+                  color: colors.textTertiary,
+                }}
+              >
+                Tap to pick order PDF / image
+              </Text>
+            )}
+          </Pressable>
         </View>
-      )}
-    </ScrollView>
+
+        {/* EMI file picker */}
+        <View style={{ marginBottom: 14 }}>
+          <Text
+            style={{
+              fontFamily: fonts.sansMedium,
+              fontSize: 13,
+              color: colors.textPrimary,
+              marginBottom: 8,
+            }}
+          >
+            EMI Confirmation (optional)
+          </Text>
+          <Pressable
+            onPress={() => pickFile("emi")}
+            style={({ pressed }) => [
+              {
+                borderWidth: 1,
+                borderStyle: "dashed",
+                borderColor: emiFile ? colors.accent : colors.border,
+                backgroundColor: emiFile
+                  ? colors.accentLight
+                  : colors.surface,
+                borderRadius: 12,
+                padding: 20,
+                alignItems: "center",
+                transform: [{ scale: pressed ? 0.97 : 1 }],
+              },
+            ]}
+          >
+            {emiFile ? (
+              <Text
+                numberOfLines={1}
+                style={{
+                  fontFamily: fonts.sansMedium,
+                  fontSize: 13,
+                  color: colors.accent,
+                }}
+              >
+                🧾 {emiFile.name}
+              </Text>
+            ) : (
+              <Text
+                style={{
+                  fontFamily: fonts.sans,
+                  fontSize: 13,
+                  color: colors.textTertiary,
+                }}
+              >
+                Screenshot of Pay Later tenure
+              </Text>
+            )}
+          </Pressable>
+        </View>
+
+        {/* Parse button */}
+        {!parsed && (
+          <Pressable
+            onPress={handleParse}
+            disabled={!orderFile || parsing}
+            style={({ pressed }) => [
+              {
+                backgroundColor: colors.accent,
+                padding: 14,
+                borderRadius: 100,
+                alignItems: "center",
+                marginTop: 8,
+                opacity: !orderFile || parsing ? 0.5 : 1,
+                transform: [{ scale: pressed ? 0.97 : 1 }],
+              },
+            ]}
+          >
+            {parsing ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text
+                style={{
+                  color: "#fff",
+                  fontFamily: fonts.sansSemibold,
+                  fontSize: 15,
+                }}
+              >
+                ✨ Parse Invoice
+              </Text>
+            )}
+          </Pressable>
+        )}
+
+        {/* Review fields — shown after parsing */}
+        {parsed && (
+          <View
+            style={{
+              marginTop: 20,
+              paddingTop: 20,
+              borderTopWidth: 1,
+              borderTopColor: colors.border,
+            }}
+          >
+            <Text
+              style={[
+                typography.sectionTitle,
+                { color: colors.textPrimary, marginBottom: 12 },
+              ]}
+            >
+              Review & Edit
+            </Text>
+
+            {parsed.warnings.length > 0 && (
+              <View
+                style={{
+                  backgroundColor: colors.surface,
+                  borderColor: colors.warning,
+                  borderWidth: 1,
+                  borderRadius: 12,
+                  padding: 14,
+                  marginBottom: 14,
+                }}
+              >
+                <Text
+                  style={{
+                    fontFamily: fonts.sansSemibold,
+                    fontSize: 13,
+                    color: colors.warning,
+                    marginBottom: 4,
+                  }}
+                >
+                  ⚠ Please verify:
+                </Text>
+                {parsed.warnings.map((w, i) => (
+                  <Text
+                    key={i}
+                    style={{
+                      fontFamily: fonts.sans,
+                      fontSize: 12,
+                      color: colors.textSecondary,
+                      marginBottom: 2,
+                    }}
+                  >
+                    • {w}
+                  </Text>
+                ))}
+              </View>
+            )}
+
+            <LabeledInput
+              label="Platform"
+              value={platforms.find((p) => p.id === platformId)?.name ?? ""}
+              onChangeText={() => {}}
+              editable={false}
+              colors={colors}
+            />
+            {platforms.length > 1 && (
+              <View
+                style={{
+                  flexDirection: "row",
+                  flexWrap: "wrap",
+                  gap: 6,
+                  marginBottom: 14,
+                }}
+              >
+                {platforms.map((p) => {
+                  const active = platformId === p.id;
+                  return (
+                    <Pressable
+                      key={p.id}
+                      onPress={() => setPlatformId(p.id)}
+                      style={({ pressed }) => [
+                        {
+                          paddingHorizontal: 12,
+                          paddingVertical: 6,
+                          borderRadius: 100,
+                          borderWidth: 1,
+                          borderColor: active ? colors.accent : colors.border,
+                          backgroundColor: active
+                            ? colors.accent
+                            : colors.surfaceAlt,
+                          transform: [{ scale: pressed ? 0.97 : 1 }],
+                        },
+                      ]}
+                    >
+                      <Text
+                        style={{
+                          fontFamily: fonts.sansMedium,
+                          fontSize: 12,
+                          color: active ? "#fff" : colors.textSecondary,
+                        }}
+                      >
+                        {p.name}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            )}
+
+            <LabeledInput
+              label="Item Name"
+              value={itemName}
+              onChangeText={setItemName}
+              colors={colors}
+            />
+            <LabeledInput
+              label="Order ID"
+              value={orderId}
+              onChangeText={setOrderId}
+              colors={colors}
+            />
+            <LabeledInput
+              label="Merchant"
+              value={merchant}
+              onChangeText={setMerchant}
+              colors={colors}
+            />
+            <LabeledInput
+              label="Total Price (₹)"
+              value={totalAmount}
+              onChangeText={setTotalAmount}
+              keyboardType="numeric"
+              colors={colors}
+            />
+            <LabeledInput
+              label="Down Payment (₹)"
+              value={downPayment}
+              onChangeText={setDownPayment}
+              keyboardType="numeric"
+              colors={colors}
+            />
+            <LabeledInput
+              label="Interest Rate (%)"
+              value={interestRate}
+              onChangeText={setInterestRate}
+              keyboardType="numeric"
+              colors={colors}
+            />
+
+            <View
+              style={{
+                flexDirection: "row",
+                gap: 8,
+                marginBottom: 14,
+              }}
+            >
+              {(["per_annum", "flat"] as const).map((rt) => {
+                const active = rateType === rt;
+                return (
+                  <Pressable
+                    key={rt}
+                    onPress={() => setRateType(rt)}
+                    style={({ pressed }) => [
+                      {
+                        flex: 1,
+                        paddingVertical: 10,
+                        borderRadius: 12,
+                        borderWidth: 1,
+                        borderColor: active ? colors.accent : colors.border,
+                        backgroundColor: active
+                          ? colors.accentLight
+                          : colors.surface,
+                        alignItems: "center",
+                        transform: [{ scale: pressed ? 0.97 : 1 }],
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={{
+                        fontFamily: active
+                          ? fonts.sansSemibold
+                          : fonts.sansMedium,
+                        fontSize: 13,
+                        color: active ? colors.accent : colors.textSecondary,
+                      }}
+                    >
+                      {rt === "per_annum" ? "Per Annum" : "Flat"}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            <LabeledInput
+              label="Processing Fee (₹)"
+              value={processingFee}
+              onChangeText={setProcessingFee}
+              keyboardType="numeric"
+              colors={colors}
+            />
+            <LabeledInput
+              label="Number of EMIs"
+              value={totalEmis}
+              onChangeText={setTotalEmis}
+              keyboardType="numeric"
+              colors={colors}
+            />
+            <LabeledInput
+              label="EMI Day (1-31)"
+              value={emiDay}
+              onChangeText={setEmiDay}
+              keyboardType="numeric"
+              colors={colors}
+            />
+            <LabeledInput
+              label="Purchase Date (YYYY-MM-DD)"
+              value={purchaseDate}
+              onChangeText={setPurchaseDate}
+              colors={colors}
+            />
+            <LabeledInput
+              label="First EMI Date (YYYY-MM-DD)"
+              value={firstEmiDate}
+              onChangeText={setFirstEmiDate}
+              colors={colors}
+            />
+
+            <Pressable
+              onPress={handleSave}
+              disabled={saving}
+              style={({ pressed }) => [
+                {
+                  backgroundColor: colors.accent,
+                  padding: 14,
+                  borderRadius: 100,
+                  alignItems: "center",
+                  marginTop: 8,
+                  opacity: saving ? 0.5 : 1,
+                  transform: [{ scale: pressed ? 0.97 : 1 }],
+                },
+              ]}
+            >
+              {saving ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text
+                  style={{
+                    color: "#fff",
+                    fontFamily: fonts.sansSemibold,
+                    fontSize: 15,
+                  }}
+                >
+                  Save Purchase
+                </Text>
+              )}
+            </Pressable>
+          </View>
+        )}
+      </ScrollView>
+    </View>
   );
 }
 
@@ -500,98 +819,52 @@ function LabeledInput({
   onChangeText,
   keyboardType,
   editable = true,
+  colors,
 }: {
   label: string;
   value: string;
   onChangeText: (v: string) => void;
   keyboardType?: "numeric" | "default";
   editable?: boolean;
+  colors: ThemeColors;
 }) {
   return (
-    <View style={styles.inputGroup}>
-      <Text style={styles.inputLabel}>{label}</Text>
+    <View style={{ marginBottom: 12 }}>
+      <Text
+        style={{
+          fontFamily: fonts.sansMedium,
+          fontSize: 12,
+          color: colors.textSecondary,
+          marginBottom: 4,
+        }}
+      >
+        {label}
+      </Text>
       <TextInput
-        style={[styles.input, !editable && styles.inputDisabled]}
+        style={{
+          borderWidth: 1,
+          borderColor: colors.border,
+          borderRadius: 12,
+          padding: 12,
+          fontSize: 14,
+          fontFamily: fonts.sans,
+          color: editable ? colors.textPrimary : colors.textSecondary,
+          backgroundColor: editable ? colors.surface : colors.surfaceAlt,
+        }}
         value={value}
         onChangeText={onChangeText}
         keyboardType={keyboardType ?? "default"}
         editable={editable}
+        placeholderTextColor={colors.textTertiary}
       />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#fff" },
-  content: { padding: 16, paddingBottom: 40 },
-  title: { fontSize: 22, fontWeight: "600", marginBottom: 4 },
-  subtitle: { fontSize: 13, color: "#6b7280", marginBottom: 20 },
-  section: { marginBottom: 16 },
-  sectionLabel: { fontSize: 13, fontWeight: "500", marginBottom: 8 },
-  fileDropzone: {
-    borderWidth: 1,
-    borderStyle: "dashed",
-    borderColor: "#d1d5db",
-    borderRadius: 8,
-    padding: 20,
-    alignItems: "center",
-  },
-  fileDropzoneFilled: { borderStyle: "solid", backgroundColor: "#eff6ff", borderColor: "#93c5fd" },
-  fileHint: { fontSize: 13, color: "#9ca3af" },
-  fileName: { fontSize: 13, color: "#1e40af", fontWeight: "500" },
-  primaryBtn: {
-    backgroundColor: "#111827",
-    padding: 14,
-    borderRadius: 8,
-    alignItems: "center",
-    marginTop: 8,
-  },
-  primaryBtnDisabled: { opacity: 0.5 },
-  primaryBtnText: { color: "#fff", fontWeight: "600", fontSize: 15 },
-  reviewSection: { marginTop: 20, paddingTop: 20, borderTopWidth: 1, borderTopColor: "#e5e7eb" },
-  reviewTitle: { fontSize: 18, fontWeight: "600", marginBottom: 12 },
-  warningBox: {
-    backgroundColor: "#fffbeb",
-    borderColor: "#fde68a",
-    borderWidth: 1,
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 12,
-  },
-  warningTitle: { fontSize: 13, fontWeight: "600", color: "#92400e", marginBottom: 4 },
-  warningText: { fontSize: 12, color: "#92400e", marginBottom: 2 },
-  inputGroup: { marginBottom: 12 },
-  inputLabel: { fontSize: 12, fontWeight: "500", color: "#374151", marginBottom: 4 },
-  input: {
-    borderWidth: 1,
-    borderColor: "#d1d5db",
-    borderRadius: 8,
-    padding: 10,
-    fontSize: 14,
-    backgroundColor: "#fff",
-  },
-  inputDisabled: { backgroundColor: "#f3f4f6", color: "#6b7280" },
-  platformRow: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginBottom: 12 },
-  platformChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: "#d1d5db",
-  },
-  platformChipActive: { backgroundColor: "#111827", borderColor: "#111827" },
-  platformChipText: { fontSize: 12, color: "#374151" },
-  platformChipTextActive: { color: "#fff" },
-  rateTypeRow: { flexDirection: "row", gap: 8, marginBottom: 12 },
-  rateChip: {
+  centered: {
     flex: 1,
-    paddingVertical: 8,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "#d1d5db",
+    justifyContent: "center",
     alignItems: "center",
   },
-  rateChipActive: { backgroundColor: "#eff6ff", borderColor: "#3b82f6" },
-  rateChipText: { fontSize: 13, color: "#6b7280" },
-  rateChipTextActive: { color: "#1e40af", fontWeight: "500" },
 });

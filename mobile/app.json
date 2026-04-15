@@ -36,6 +36,9 @@
         "projectId": "a93bc4f4-86b4-4376-b57e-a4ddb02ee4b3"
       }
     },
-    "owner": "komalvsingh"
+    "owner": "komalvsingh",
+    "plugins": [
+      "expo-font"
+    ]
   }
 }

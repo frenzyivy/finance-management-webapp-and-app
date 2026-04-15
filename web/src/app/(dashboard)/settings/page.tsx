@@ -19,6 +19,7 @@ import {
 import { toast } from "sonner";
 
 import { createClient } from "@/lib/supabase/client";
+import { PageHeader } from "@/components/layout/PageHeader";
 import { useUser } from "@/hooks/use-user";
 import { formatCurrency } from "@/lib/utils/currency";
 import { EXPENSE_CATEGORIES } from "@/lib/constants/categories";
@@ -1268,13 +1269,11 @@ function NotificationsTab() {
 
 export default function SettingsPage() {
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-bold tracking-tight">Settings</h2>
-        <p className="text-muted-foreground">
-          Manage your account, preferences, and data.
-        </p>
+    <div className="flex flex-col">
+      <div className="animate d1">
+        <PageHeader title="Settings" eyebrow="Account & preferences" />
       </div>
+      <div className="px-6 space-y-6">
 
       <Tabs defaultValue="profile">
         <TabsList className="flex-wrap h-auto">
@@ -1323,6 +1322,7 @@ export default function SettingsPage() {
           <AccountTab />
         </TabsContent>
       </Tabs>
+      </div>
     </div>
   );
 }

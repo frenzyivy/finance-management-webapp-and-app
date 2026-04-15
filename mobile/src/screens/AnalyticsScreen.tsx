@@ -2,32 +2,65 @@ import React from "react";
 import {
   View,
   Text,
-  StyleSheet,
   ScrollView,
-  TouchableOpacity,
+  Pressable,
   ActivityIndicator,
+  StyleSheet,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import Svg, { Path } from "react-native-svg";
 import { useAnalytics } from "../hooks/useAnalytics";
-import { ExpensePieChart } from "../components/charts/ExpensePieChart";
-import { DailySpendingChart } from "../components/charts/DailySpendingChart";
-import { MonthlyTrendChart } from "../components/charts/MonthlyTrendChart";
-import { formatCurrency } from "../lib/format";
+import { useTheme } from "../lib/theme-context";
+import { text as typography } from "../lib/typography";
+import { navHeight } from "../lib/radii";
+import { PageHeader } from "../components/PageHeader";
+import {
+  ChartCard,
+  DebtHealthGrid,
+  SectionHeader,
+  InsightCard,
+  CategoryBreakdownRow,
+  CATEGORY_COLORS,
+  MonthlyBarChart,
+  PairedBarChart,
+  formatINR,
+} from "../components/komal";
 
 function formatMonthYear(d: Date): string {
   return d.toLocaleDateString("en-IN", { month: "long", year: "numeric" });
 }
 
+function mapCategoryKey(cat: string): string {
+  switch (cat) {
+    case "food_groceries":
+      return "food";
+    case "credit_card_payments":
+      return "credit_card";
+    case "emis":
+      return "emi";
+    case "family_personal":
+      return "family";
+    case "debt_repayment":
+      return "credit_card";
+    default:
+      return cat;
+  }
+}
+
+type NavProp = NativeStackNavigationProp<Record<string, object | undefined>>;
+
 export function AnalyticsScreen() {
-  const navigation = useNavigation<any>();
+  const navigation = useNavigation<NavProp>();
+  const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
   const {
     totalIncome,
     totalExpenses,
     netCashFlow,
     savingsRate,
-    expenseByCategory,
     topCategories,
-    dailySpending,
     monthlyTrend,
     totalDebt,
     monthlyDebtPayments,
@@ -38,209 +71,279 @@ export function AnalyticsScreen() {
     setSelectedMonth,
   } = useAnalytics();
 
-  const goToPrevMonth = () => {
+  const prevMonth = () =>
     setSelectedMonth(
       new Date(selectedMonth.getFullYear(), selectedMonth.getMonth() - 1, 1)
     );
-  };
-
-  const goToNextMonth = () => {
+  const nextMonth = () =>
     setSelectedMonth(
       new Date(selectedMonth.getFullYear(), selectedMonth.getMonth() + 1, 1)
     );
-  };
 
   if (loading) {
     return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#0d9488" />
+      <View style={[styles.centered, { backgroundColor: colors.bg }]}>
+        <ActivityIndicator size="large" color={colors.accent} />
       </View>
     );
   }
 
+  const monthsOverBudget = monthlyTrend.filter(
+    (m) => m.expenses > m.income && m.income > 0
+  ).length;
+
+  // Build last-12-months volume chart from monthlyTrend; fall back to whatever's available.
+  const monthlyBars = monthlyTrend.map((m) => ({
+    label: m.month.slice(0, 3),
+    value: m.income + m.expenses,
+  }));
+
   return (
-    <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
-      {/* Month Selector */}
-      <View style={styles.monthSelector}>
-        <TouchableOpacity onPress={goToPrevMonth} style={styles.monthArrow}>
-          <Text style={styles.monthArrowText}>{"<"}</Text>
-        </TouchableOpacity>
-        <Text style={styles.monthLabel}>{formatMonthYear(selectedMonth)}</Text>
-        <TouchableOpacity onPress={goToNextMonth} style={styles.monthArrow}>
-          <Text style={styles.monthArrowText}>{">"}</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Year in Review Button */}
-      <TouchableOpacity
-        style={styles.yearReviewBtn}
-        onPress={() => navigation.navigate("YearReview")}
-        activeOpacity={0.8}
-      >
-        <Text style={styles.yearReviewBtnText}>Year in Review</Text>
-      </TouchableOpacity>
-
-      {/* Summary Cards */}
-      <View style={styles.cardGrid}>
-        <View style={[styles.summaryCard, { borderLeftColor: "#22c55e" }]}>
-          <Text style={styles.cardLabel}>Income</Text>
-          <Text style={[styles.cardValue, { color: "#22c55e" }]}>
-            {formatCurrency(totalIncome)}
-          </Text>
-        </View>
-        <View style={[styles.summaryCard, { borderLeftColor: "#f87171" }]}>
-          <Text style={styles.cardLabel}>Expenses</Text>
-          <Text style={[styles.cardValue, { color: "#f87171" }]}>
-            {formatCurrency(totalExpenses)}
-          </Text>
-        </View>
-        <View style={[styles.summaryCard, { borderLeftColor: "#3b82f6" }]}>
-          <Text style={styles.cardLabel}>Net Cash Flow</Text>
-          <Text
-            style={[
-              styles.cardValue,
-              { color: netCashFlow >= 0 ? "#22c55e" : "#f87171" },
-            ]}
-          >
-            {formatCurrency(netCashFlow)}
-          </Text>
-        </View>
-        <View style={[styles.summaryCard, { borderLeftColor: "#8b5cf6" }]}>
-          <Text style={styles.cardLabel}>Savings Rate</Text>
-          <Text style={[styles.cardValue, { color: "#8b5cf6" }]}>
-            {savingsRate.toFixed(1)}%
-          </Text>
-        </View>
-      </View>
-
-      {/* Expense Breakdown */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Expense Breakdown</Text>
-        <ExpensePieChart data={topCategories} />
-      </View>
-
-      {/* Daily Spending */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Daily Spending</Text>
-        <DailySpendingChart data={dailySpending} />
-      </View>
-
-      {/* 6-Month Trend */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>6-Month Trend</Text>
-        <MonthlyTrendChart data={monthlyTrend} />
-      </View>
-
-      {/* Debt Health */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Debt Health</Text>
-        <View style={styles.debtGrid}>
-          <View style={styles.debtCard}>
-            <Text style={styles.debtLabel}>Total Debt</Text>
-            <Text style={[styles.debtValue, { color: "#f87171" }]}>
-              {formatCurrency(totalDebt)}
-            </Text>
-          </View>
-          <View style={styles.debtCard}>
-            <Text style={styles.debtLabel}>Monthly Payments</Text>
-            <Text style={styles.debtValue}>
-              {formatCurrency(monthlyDebtPayments)}
-            </Text>
-          </View>
-          <View style={styles.debtCard}>
-            <Text style={styles.debtLabel}>Debt-to-Income</Text>
-            <Text
-              style={[
-                styles.debtValue,
-                { color: debtToIncomeRatio > 40 ? "#f87171" : "#22c55e" },
+    <ScrollView
+      style={{ flex: 1, backgroundColor: colors.bg }}
+      contentContainerStyle={{
+        paddingBottom: navHeight + 40 + insets.bottom,
+      }}
+    >
+      <PageHeader
+        title="Analytics"
+        actions={
+          <>
+            <Pressable
+              onPress={prevMonth}
+              style={({ pressed }) => [
+                styles.iconBtn,
+                {
+                  backgroundColor: colors.surface,
+                  borderColor: colors.border,
+                  transform: [{ scale: pressed ? 0.94 : 1 }],
+                },
               ]}
             >
-              {debtToIncomeRatio.toFixed(1)}%
-            </Text>
-          </View>
-          <View style={styles.debtCard}>
-            <Text style={styles.debtLabel}>Months to Debt-Free</Text>
-            <Text style={styles.debtValue}>
-              {monthsToDebtFree > 0 ? `${monthsToDebtFree} mo` : "--"}
-            </Text>
-          </View>
-        </View>
+              <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={colors.textPrimary} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                <Path d="m15 18-6-6 6-6" />
+              </Svg>
+            </Pressable>
+            <Pressable
+              onPress={nextMonth}
+              style={({ pressed }) => [
+                styles.iconBtn,
+                {
+                  backgroundColor: colors.surface,
+                  borderColor: colors.border,
+                  transform: [{ scale: pressed ? 0.94 : 1 }],
+                },
+              ]}
+            >
+              <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={colors.textPrimary} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                <Path d="m9 18 6-6-6-6" />
+              </Svg>
+            </Pressable>
+            <Pressable
+              onPress={() => navigation.navigate("YearReview" as never)}
+              style={({ pressed }) => [
+                styles.iconBtn,
+                {
+                  backgroundColor: colors.surface,
+                  borderColor: colors.border,
+                  transform: [{ scale: pressed ? 0.94 : 1 }],
+                },
+              ]}
+            >
+              <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={colors.textPrimary} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                <Path d="M8 2v4M16 2v4M3 10h18M5 6h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2Z" />
+              </Svg>
+            </Pressable>
+          </>
+        }
+      />
+
+      <View style={{ paddingHorizontal: 24, marginBottom: 16 }}>
+        <Text
+          style={[typography.caption, { color: colors.textSecondary }]}
+        >
+          {formatMonthYear(selectedMonth)}
+        </Text>
       </View>
+
+      <ChartCard
+        title="Monthly Activity"
+        subtitle="Total volume across recent months"
+        legend={[{ color: colors.accent, label: "Total" }]}
+      >
+        {monthlyBars.length > 0 ? (
+          <MonthlyBarChart data={monthlyBars} />
+        ) : (
+          <Text style={{ color: colors.textTertiary, fontSize: 13 }}>
+            Not enough data yet.
+          </Text>
+        )}
+      </ChartCard>
+
+      <ChartCard
+        title="6-Month Trend"
+        subtitle="Income vs expenses"
+        legend={[
+          { color: colors.accent, label: "Income" },
+          { color: colors.expense, label: "Expense" },
+        ]}
+      >
+        {monthlyTrend.length > 0 ? (
+          <PairedBarChart
+            data={monthlyTrend.slice(-6).map((m) => ({
+              label: m.month.slice(0, 3),
+              income: m.income,
+              expense: m.expenses,
+            }))}
+          />
+        ) : (
+          <Text style={{ color: colors.textTertiary, fontSize: 13 }}>
+            No trend data yet.
+          </Text>
+        )}
+      </ChartCard>
+
+      {monthlyTrend.length > 0 ? (
+        <InsightCard emoji={monthsOverBudget > 0 ? "⚠️" : "🎉"}>
+          {monthsOverBudget > 0
+            ? `Expenses topped income in ${monthsOverBudget} of the last 6 months. Time to trim.`
+            : "Income beat expenses in every one of the last 6 months — nicely done."}
+        </InsightCard>
+      ) : null}
+
+      <ChartCard title="Snapshot" subtitle="This month">
+        <View style={styles.statGrid}>
+          <Stat label="Income" value={formatINR(totalIncome)} tone="income" />
+          <Stat label="Expense" value={formatINR(totalExpenses)} tone="expense" />
+          <Stat
+            label="Net"
+            value={formatINR(netCashFlow)}
+            tone={netCashFlow < 0 ? "expense" : "income"}
+          />
+          <Stat
+            label="Save rate"
+            value={`${savingsRate > 0 ? savingsRate.toFixed(1) : 0}%`}
+          />
+        </View>
+      </ChartCard>
+
+      <SectionHeader title="Debt Health" />
+
+      <DebtHealthGrid
+        metrics={[
+          { label: "Total Debt", value: formatINR(totalDebt), tone: "red" },
+          {
+            label: "Monthly Pay",
+            value: formatINR(monthlyDebtPayments),
+            tone: "dark",
+          },
+          {
+            label: "Debt / Income",
+            value: `${debtToIncomeRatio.toFixed(1)}%`,
+            tone: debtToIncomeRatio > 40 ? "red" : "warn",
+          },
+          {
+            label: "Debt-Free In",
+            value: monthsToDebtFree > 0 ? `${monthsToDebtFree} mo` : "—",
+            tone: "dark",
+          },
+        ]}
+      />
+
+      <SectionHeader title="Top Categories" />
+
+      {topCategories.length === 0 ? (
+        <Text
+          style={[
+            typography.captionRegular,
+            {
+              color: colors.textSecondary,
+              textAlign: "center",
+              marginHorizontal: 24,
+              marginVertical: 24,
+            },
+          ]}
+        >
+          No expenses recorded this month.
+        </Text>
+      ) : (
+        topCategories.map((c) => (
+          <CategoryBreakdownRow
+            key={c.category}
+            name={c.label}
+            color={CATEGORY_COLORS[mapCategoryKey(c.category)] || colors.accent}
+            amount={c.amount}
+            percent={c.percentage}
+          />
+        ))
+      )}
     </ScrollView>
   );
 }
 
+function Stat({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: string;
+  tone?: "income" | "expense";
+}) {
+  const { colors } = useTheme();
+  const color =
+    tone === "income"
+      ? colors.accent
+      : tone === "expense"
+      ? colors.expense
+      : colors.textPrimary;
+  return (
+    <View
+      style={{
+        flexBasis: "48%",
+        flexGrow: 1,
+        padding: 12,
+        borderRadius: 12,
+        backgroundColor: colors.surfaceAlt,
+      }}
+    >
+      <Text
+        style={[typography.pillLabel, { color: colors.textTertiary }]}
+      >
+        {label.toUpperCase()}
+      </Text>
+      <Text
+        style={{
+          fontSize: 16,
+          fontWeight: "700",
+          color,
+          marginTop: 4,
+          letterSpacing: -0.16,
+        }}
+      >
+        {value}
+      </Text>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: "#fff" },
-  content: { padding: 16, paddingBottom: 40 },
   centered: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#fff",
   },
-  monthSelector: {
-    flexDirection: "row",
+  iconBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 100,
+    borderWidth: 1,
+    alignItems: "center",
     justifyContent: "center",
-    alignItems: "center",
-    marginBottom: 16,
-    gap: 16,
   },
-  monthArrow: {
-    padding: 8,
-    backgroundColor: "#f3f4f6",
-    borderRadius: 8,
-  },
-  monthArrowText: { fontSize: 18, fontWeight: "700", color: "#0d9488" },
-  monthLabel: { fontSize: 18, fontWeight: "700", color: "#1f2937" },
-  yearReviewBtn: {
-    backgroundColor: "#0d9488",
-    borderRadius: 10,
-    paddingVertical: 12,
-    alignItems: "center",
-    marginBottom: 16,
-  },
-  yearReviewBtnText: { color: "#fff", fontSize: 15, fontWeight: "700" },
-  cardGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 10,
-    marginBottom: 20,
-  },
-  summaryCard: {
-    flex: 1,
-    minWidth: "45%",
-    backgroundColor: "#f9fafb",
-    borderRadius: 12,
-    padding: 14,
-    borderLeftWidth: 4,
-  },
-  cardLabel: { fontSize: 12, color: "#6b7280", marginBottom: 4 },
-  cardValue: { fontSize: 18, fontWeight: "700" },
-  section: {
-    backgroundColor: "#f9fafb",
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: "#1f2937",
-    marginBottom: 8,
-  },
-  debtGrid: {
+  statGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 10,
   },
-  debtCard: {
-    flex: 1,
-    minWidth: "45%",
-    backgroundColor: "#fff",
-    borderRadius: 8,
-    padding: 12,
-  },
-  debtLabel: { fontSize: 11, color: "#6b7280", marginBottom: 4 },
-  debtValue: { fontSize: 16, fontWeight: "700", color: "#1f2937" },
 });

@@ -1,112 +1,55 @@
-import React from "react";
+import React, { useState } from "react";
+import { View } from "react-native";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
+import { useNavigation } from "@react-navigation/native";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { DashboardScreen } from "../screens/DashboardScreen";
 import { AnalyticsScreen } from "../screens/AnalyticsScreen";
 import { IncomeScreen } from "../screens/IncomeScreen";
-import { ExpensesScreen } from "../screens/ExpensesScreen";
-import { GoalsScreen } from "../screens/GoalsScreen";
-import { DebtsScreen } from "../screens/DebtsScreen";
-import { BudgetScreen } from "../screens/BudgetScreen";
-import { BusinessDashboardScreen } from "../screens/BusinessDashboardScreen";
-import { SettingsScreen } from "../screens/SettingsScreen";
-import { Text } from "react-native";
+import { MoreScreen } from "../screens/MoreScreen";
+import { BottomTabBar } from "../components/BottomTabBar";
+import { AddSheet } from "../components/AddSheet";
 
 const Tab = createBottomTabNavigator();
 
+// Placeholder — the Add tab is intercepted by the custom tab bar and never rendered.
+function AddPlaceholder() {
+  return <View />;
+}
+
 export function MainTabs() {
+  const [addOpen, setAddOpen] = useState(false);
+  const navigation = useNavigation<NativeStackNavigationProp<Record<string, object | undefined>>>();
+
+  const handlePick = (key: string) => {
+    // Route each AddSheet selection to its corresponding stack screen.
+    navigation.navigate(key as never);
+  };
+
   return (
-    <Tab.Navigator
-      screenOptions={{
-        headerStyle: { backgroundColor: "#0d9488" },
-        headerTintColor: "#fff",
-        tabBarActiveTintColor: "#0d9488",
-      }}
-    >
-      <Tab.Screen
-        name="Dashboard"
-        component={DashboardScreen}
-        options={{
-          tabBarIcon: ({ color }) => (
-            <Text style={{ color, fontSize: 20 }}>🏠</Text>
-          ),
-        }}
+    <>
+      <Tab.Navigator
+        screenOptions={{ headerShown: false }}
+        tabBar={(props) => (
+          <BottomTabBar
+            state={props.state}
+            navigation={props.navigation}
+            onAddPress={() => setAddOpen(true)}
+          />
+        )}
+      >
+        <Tab.Screen name="Home" component={DashboardScreen} />
+        <Tab.Screen name="Analytics" component={AnalyticsScreen} />
+        <Tab.Screen name="Add" component={AddPlaceholder} />
+        <Tab.Screen name="Income" component={IncomeScreen} />
+        <Tab.Screen name="More" component={MoreScreen} />
+      </Tab.Navigator>
+
+      <AddSheet
+        visible={addOpen}
+        onClose={() => setAddOpen(false)}
+        onPick={handlePick}
       />
-      <Tab.Screen
-        name="Analytics"
-        component={AnalyticsScreen}
-        options={{
-          tabBarIcon: ({ color }) => (
-            <Text style={{ color, fontSize: 20 }}>📊</Text>
-          ),
-        }}
-      />
-      <Tab.Screen
-        name="Income"
-        component={IncomeScreen}
-        options={{
-          tabBarIcon: ({ color }) => (
-            <Text style={{ color, fontSize: 20 }}>💰</Text>
-          ),
-        }}
-      />
-      <Tab.Screen
-        name="Expenses"
-        component={ExpensesScreen}
-        options={{
-          tabBarIcon: ({ color }) => (
-            <Text style={{ color, fontSize: 20 }}>💸</Text>
-          ),
-        }}
-      />
-      <Tab.Screen
-        name="Goals"
-        component={GoalsScreen}
-        options={{
-          tabBarIcon: ({ color }) => (
-            <Text style={{ color, fontSize: 20 }}>🐷</Text>
-          ),
-        }}
-      />
-      <Tab.Screen
-        name="Debts"
-        component={DebtsScreen}
-        options={{
-          tabBarIcon: ({ color }) => (
-            <Text style={{ color, fontSize: 20 }}>💳</Text>
-          ),
-        }}
-      />
-      <Tab.Screen
-        name="Budget"
-        component={BudgetScreen}
-        options={{
-          tabBarIcon: ({ color }) => (
-            <Text style={{ color, fontSize: 20 }}>🎯</Text>
-          ),
-        }}
-      />
-      <Tab.Screen
-        name="Business"
-        component={BusinessDashboardScreen}
-        options={{
-          title: "Allianza Biz",
-          headerStyle: { backgroundColor: "#185FA5" },
-          headerTintColor: "#fff",
-          tabBarActiveTintColor: "#185FA5",
-          tabBarIcon: ({ color }) => (
-            <Text style={{ color, fontSize: 20 }}>💼</Text>
-          ),
-        }}
-      />
-      <Tab.Screen
-        name="Settings"
-        component={SettingsScreen}
-        options={{
-          tabBarIcon: ({ color }) => (
-            <Text style={{ color, fontSize: 20 }}>⚙️</Text>
-          ),
-        }}
-      />
-    </Tab.Navigator>
+    </>
   );
 }

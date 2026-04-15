@@ -1,8 +1,6 @@
 "use client";
 
-import { useState } from "react";
-import { Sidebar } from "@/components/layout/sidebar";
-import { Header } from "@/components/layout/header";
+import { BottomNav } from "@/components/layout/BottomNav";
 import { useRealtimeSync } from "@/hooks/use-realtime-sync";
 
 export default function DashboardLayout({
@@ -10,16 +8,24 @@ export default function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const [sidebarOpen, setSidebarOpen] = useState(false);
   useRealtimeSync();
 
   return (
-    <div className="flex h-screen overflow-hidden">
-      <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-      <div className="flex flex-1 flex-col overflow-hidden">
-        <Header onMenuClick={() => setSidebarOpen(true)} />
-        <main className="flex-1 overflow-y-auto p-4 lg:p-6">{children}</main>
+    <div
+      className="min-h-[100dvh] w-full flex justify-center"
+      style={{ background: "var(--bg)" }}
+    >
+      <div
+        className="relative w-full min-h-[100dvh] flex flex-col"
+        style={{
+          maxWidth: "var(--shell-max-width)",
+          background: "var(--bg)",
+          paddingBottom: "calc(var(--nav-height) + 24px + env(safe-area-inset-bottom, 0px))",
+        }}
+      >
+        <main className="flex-1 flex flex-col">{children}</main>
       </div>
+      <BottomNav />
     </div>
   );
 }

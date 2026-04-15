@@ -4,7 +4,7 @@ import {
   Text,
   StyleSheet,
   FlatList,
-  TouchableOpacity,
+  Pressable,
   ActivityIndicator,
   Alert,
   Platform,
@@ -20,12 +20,15 @@ import {
   openAppSettings,
 } from "../lib/sms-reader";
 import type { PermissionResult } from "../lib/sms-reader";
-import { formatCurrency, formatDate } from "../lib/format";
-import {
-  EXPENSE_CATEGORIES,
-  INCOME_CATEGORIES,
-} from "../lib/constants";
+import { formatDate } from "../lib/format";
+import { EXPENSE_CATEGORIES, INCOME_CATEGORIES } from "../lib/constants";
 import { PickerModal } from "../components/PickerModal";
+import { useTheme } from "../lib/theme-context";
+import { text as typography, fonts } from "../lib/typography";
+import { radii, navHeight } from "../lib/radii";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { PageHeader } from "../components/PageHeader";
+import { formatINR, TransactionCard } from "../components/komal";
 import type { ParsedSmsTransaction } from "../lib/sms-parser";
 
 interface ScanResult extends ParsedSmsTransaction {
@@ -57,7 +60,14 @@ function smsHash(rawText: string): string {
   return rawText.slice(0, 100);
 }
 
-type PaymentModeFilter = "all" | "upi" | "imps" | "neft" | "atm" | "pos" | "other";
+type PaymentModeFilter =
+  | "all"
+  | "upi"
+  | "imps"
+  | "neft"
+  | "atm"
+  | "pos"
+  | "other";
 
 const DATE_FILTERS = [
   { label: "Today", days: 0 },
@@ -70,16 +80,20 @@ const DATE_FILTERS = [
 ] as const;
 
 export function SmsScanScreen({ navigation }: { navigation: any }) {
+  const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
   const [scanning, setScanning] = useState(false);
   const [importing, setImporting] = useState(false);
   const [allResults, setAllResults] = useState<ScanResult[]>([]);
   const [activeDaysFilter, setActiveDaysFilter] = useState(90); // default: 3 months
   const [activeSenders, setActiveSenders] = useState<Set<string>>(new Set()); // empty = all
-  const [activePaymentMode, setActivePaymentMode] = useState<PaymentModeFilter>("all");
+  const [activePaymentMode, setActivePaymentMode] =
+    useState<PaymentModeFilter>("all");
   const [showSenderFilter, setShowSenderFilter] = useState(false);
   const [showHidden, setShowHidden] = useState(false);
   // null = checking, "granted" | "denied" | "never_ask_again"
-  const [permissionState, setPermissionState] = useState<PermissionResult | null>(null);
+  const [permissionState, setPermissionState] =
+    useState<PermissionResult | null>(null);
   const [categoryPickerVisible, setCategoryPickerVisible] = useState(false);
   const [activeResultIdx, setActiveResultIdx] = useState<number>(-1);
 
@@ -118,7 +132,10 @@ export function SmsScanScreen({ navigation }: { navigation: any }) {
         if (activePaymentMode === "neft") return mode === "NEFT";
         if (activePaymentMode === "atm") return mode === "ATM";
         if (activePaymentMode === "pos") return mode === "POS";
-        if (activePaymentMode === "other") return !mode || !["UPI", "IMPS", "NEFT", "ATM", "POS"].includes(mode);
+        if (activePaymentMode === "other")
+          return (
+            !mode || !["UPI", "IMPS", "NEFT", "ATM", "POS"].includes(mode)
+          );
         return true;
       });
     }
@@ -138,7 +155,13 @@ export function SmsScanScreen({ navigation }: { navigation: any }) {
     }
 
     return filtered;
-  }, [allResults, activeDaysFilter, activeSenders, activePaymentMode, showHidden]);
+  }, [
+    allResults,
+    activeDaysFilter,
+    activeSenders,
+    activePaymentMode,
+    showHidden,
+  ]);
 
   const hiddenCount = allResults.filter((r) => r.hidden).length;
 
@@ -164,7 +187,11 @@ export function SmsScanScreen({ navigation }: { navigation: any }) {
     const hash = smsHash(item.rawText);
     // Update local state
     setAllResults((prev) =>
-      prev.map((r) => (r.rawText === item.rawText ? { ...r, hidden: true, selected: false } : r))
+      prev.map((r) =>
+        r.rawText === item.rawText
+          ? { ...r, hidden: true, selected: false }
+          : r
+      )
     );
     // Persist to AsyncStorage
     const existing = await loadHiddenHashes();
@@ -207,15 +234,12 @@ export function SmsScanScreen({ navigation }: { navigation: any }) {
     if (result === "granted") {
       startScan();
     } else if (result === "never_ask_again") {
-      // System won't show the dialog anymore — take user to app settings
       openAppSettings();
     }
   }
 
   function handleOpenSettings() {
     openAppSettings();
-    // When user comes back from settings, re-check permission
-    // We use a small delay since the app resumes before the toggle takes effect
     const unsubscribe = navigation.addListener("focus", () => {
       checkPermission();
       unsubscribe();
@@ -232,7 +256,9 @@ export function SmsScanScreen({ navigation }: { navigation: any }) {
         readSmsMessages(sinceDate),
         loadHiddenHashes(),
       ]);
-      const bankMessages = messages.filter((m) => isBankSms(m.address, m.body));
+      const bankMessages = messages.filter((m) =>
+        isBankSms(m.address, m.body)
+      );
 
       // Fetch existing expenses and income to detect already-imported transactions
       const [expenseRes, incomeRes] = await Promise.all([
@@ -265,7 +291,8 @@ export function SmsScanScreen({ navigation }: { navigation: any }) {
           parsed.push({
             ...result,
             selected: !alreadyImported && !isHidden,
-            assignedCategory: result.type === "debit" ? "miscellaneous" : "other",
+            assignedCategory:
+              result.type === "debit" ? "miscellaneous" : "other",
             alreadyImported,
             sender: msg.address,
             hidden: isHidden,
@@ -285,12 +312,13 @@ export function SmsScanScreen({ navigation }: { navigation: any }) {
   }
 
   function toggleSelect(idx: number) {
-    // idx is relative to filtered `results` — find the actual item and toggle by date+amount
     const item = results[idx];
     if (!item) return;
     setAllResults((prev) =>
       prev.map((r) =>
-        r.date === item.date && r.amount === item.amount && r.rawText === item.rawText
+        r.date === item.date &&
+        r.amount === item.amount &&
+        r.rawText === item.rawText
           ? { ...r, selected: !r.selected }
           : r
       )
@@ -300,14 +328,18 @@ export function SmsScanScreen({ navigation }: { navigation: any }) {
   function selectAll() {
     const filteredKeys = new Set(results.map((r) => r.rawText));
     setAllResults((prev) =>
-      prev.map((r) => (filteredKeys.has(r.rawText) ? { ...r, selected: true } : r))
+      prev.map((r) =>
+        filteredKeys.has(r.rawText) ? { ...r, selected: true } : r
+      )
     );
   }
 
   function deselectAll() {
     const filteredKeys = new Set(results.map((r) => r.rawText));
     setAllResults((prev) =>
-      prev.map((r) => (filteredKeys.has(r.rawText) ? { ...r, selected: false } : r))
+      prev.map((r) =>
+        filteredKeys.has(r.rawText) ? { ...r, selected: false } : r
+      )
     );
   }
 
@@ -356,65 +388,82 @@ export function SmsScanScreen({ navigation }: { navigation: any }) {
       let errorCount = 0;
 
       for (const r of selected) {
-        const payee = r.description || r.merchantName || r.upiId?.split("@")[0] || "Unknown";
-        const paymentMethod = r.paymentMode === "UPI" ? "upi"
-          : r.paymentMode === "IMPS" || r.paymentMode === "NEFT" || r.paymentMode === "RTGS" ? "bank_transfer"
-          : r.paymentMode === "ATM" ? "cash"
-          : r.paymentMode === "POS" ? "debit_card"
-          : "upi";
+        const payee =
+          r.description ||
+          r.merchantName ||
+          r.upiId?.split("@")[0] ||
+          "Unknown";
+        const paymentMethod =
+          r.paymentMode === "UPI"
+            ? "upi"
+            : r.paymentMode === "IMPS" ||
+              r.paymentMode === "NEFT" ||
+              r.paymentMode === "RTGS"
+            ? "bank_transfer"
+            : r.paymentMode === "ATM"
+            ? "cash"
+            : r.paymentMode === "POS"
+            ? "debit_card"
+            : "upi";
 
         if (r.type === "debit") {
-          // Insert directly into expense_entries
-          const { error } = await supabase
-            .from("expense_entries")
-            .insert({
-              user_id: user.id,
-              amount: r.amount,
-              category: r.assignedCategory,
-              payee_name: payee,
-              date: r.date,
-              payment_method: paymentMethod,
-              is_emi: false,
-              is_recurring: false,
-              notes: r.upiRemark
-                ? `SMS Import | ${r.upiRemark}`
-                : `SMS Import | ${r.sender}`,
-            });
-          if (error) { errorCount++; } else { successCount++; }
+          const { error } = await supabase.from("expense_entries").insert({
+            user_id: user.id,
+            amount: r.amount,
+            category: r.assignedCategory,
+            payee_name: payee,
+            date: r.date,
+            payment_method: paymentMethod,
+            is_emi: false,
+            is_recurring: false,
+            notes: r.upiRemark
+              ? `SMS Import | ${r.upiRemark}`
+              : `SMS Import | ${r.sender}`,
+          });
+          if (error) {
+            errorCount++;
+          } else {
+            successCount++;
+          }
         } else {
-          // Insert directly into income_entries
-          const { error } = await supabase
-            .from("income_entries")
-            .insert({
-              user_id: user.id,
-              amount: r.amount,
-              category: r.assignedCategory,
-              source_name: payee,
-              date: r.date,
-              payment_method: paymentMethod,
-              is_recurring: false,
-              notes: r.upiRemark
-                ? `SMS Import | ${r.upiRemark}`
-                : `SMS Import | ${r.sender}`,
-            });
-          if (error) { errorCount++; } else { successCount++; }
+          const { error } = await supabase.from("income_entries").insert({
+            user_id: user.id,
+            amount: r.amount,
+            category: r.assignedCategory,
+            source_name: payee,
+            date: r.date,
+            payment_method: paymentMethod,
+            is_recurring: false,
+            notes: r.upiRemark
+              ? `SMS Import | ${r.upiRemark}`
+              : `SMS Import | ${r.sender}`,
+          });
+          if (error) {
+            errorCount++;
+          } else {
+            successCount++;
+          }
         }
       }
 
       if (successCount > 0) {
         Alert.alert(
           "Added to Dashboard",
-          `${successCount} transaction${successCount !== 1 ? "s" : ""} added directly to your ${selected[0].type === "debit" ? "Expenses" : "Income"}.${errorCount > 0 ? `\n${errorCount} failed.` : ""}`,
+          `${successCount} transaction${successCount !== 1 ? "s" : ""} added directly to your ${
+            selected[0].type === "debit" ? "Expenses" : "Income"
+          }.${errorCount > 0 ? `\n${errorCount} failed.` : ""}`,
           [
             {
               text: "View Expenses",
-              onPress: () => navigation.navigate("Main", { screen: "Expenses" }),
+              onPress: () =>
+                navigation.navigate("Main", { screen: "Expenses" }),
             },
             { text: "OK" },
           ]
         );
-        // Mark imported ones as already imported
-        const importedTexts = new Set(selected.filter((_, i) => i < successCount).map((r) => r.rawText));
+        const importedTexts = new Set(
+          selected.filter((_, i) => i < successCount).map((r) => r.rawText)
+        );
         setAllResults((prev) =>
           prev.map((r) =>
             importedTexts.has(r.rawText)
@@ -423,7 +472,10 @@ export function SmsScanScreen({ navigation }: { navigation: any }) {
           )
         );
       } else {
-        Alert.alert("Error", "Failed to import transactions. Please try again.");
+        Alert.alert(
+          "Error",
+          "Failed to import transactions. Please try again."
+        );
       }
     } catch (err) {
       Alert.alert("Error", "Failed to import transactions.");
@@ -441,28 +493,109 @@ export function SmsScanScreen({ navigation }: { navigation: any }) {
   if (permissionState === "denied" || permissionState === "never_ask_again") {
     const isBlocked = permissionState === "never_ask_again";
     return (
-      <View style={styles.centered}>
-        <Text style={styles.permTitle}>SMS Permission Required</Text>
-        <Text style={styles.permDesc}>
-          {isBlocked
-            ? "SMS permission was previously denied. Please open Settings and enable SMS permission for KomalFin to scan your bank messages."
-            : "KomalFin needs to read your SMS to find bank transaction messages. Your messages are parsed on-device and never sent to any server."}
-        </Text>
-        {isBlocked ? (
-          <TouchableOpacity style={styles.primaryBtn} onPress={handleOpenSettings}>
-            <Text style={styles.primaryBtnText}>Open Settings</Text>
-          </TouchableOpacity>
-        ) : (
-          <TouchableOpacity style={styles.primaryBtn} onPress={requestAndScan}>
-            <Text style={styles.primaryBtnText}>Grant Permission</Text>
-          </TouchableOpacity>
-        )}
-        <TouchableOpacity
-          style={styles.secondaryBtn}
-          onPress={() => navigation.goBack()}
+      <View style={{ flex: 1, backgroundColor: colors.bg }}>
+        <PageHeader title="Scan SMS" eyebrow="Parse bank SMS" />
+        <View
+          style={{
+            flex: 1,
+            justifyContent: "center",
+            alignItems: "center",
+            paddingHorizontal: 32,
+          }}
         >
-          <Text style={styles.secondaryBtnText}>Cancel</Text>
-        </TouchableOpacity>
+          <Text
+            style={[
+              typography.sectionTitle,
+              {
+                color: colors.textPrimary,
+                marginBottom: 12,
+                textAlign: "center",
+              },
+            ]}
+          >
+            SMS Permission Required
+          </Text>
+          <Text
+            style={[
+              typography.body,
+              {
+                color: colors.textSecondary,
+                textAlign: "center",
+                lineHeight: 20,
+                marginBottom: 24,
+              },
+            ]}
+          >
+            {isBlocked
+              ? "SMS permission was previously denied. Please open Settings and enable SMS permission for KomalFin to scan your bank messages."
+              : "KomalFin needs to read your SMS to find bank transaction messages. Your messages are parsed on-device and never sent to any server."}
+          </Text>
+          {isBlocked ? (
+            <Pressable
+              onPress={handleOpenSettings}
+              style={({ pressed }) => [
+                styles.primaryBtnBase,
+                {
+                  backgroundColor: colors.accent,
+                  transform: [{ scale: pressed ? 0.97 : 1 }],
+                },
+              ]}
+            >
+              <Text
+                style={{
+                  color: "#fff",
+                  fontFamily: fonts.sansSemibold,
+                  fontSize: 15,
+                }}
+              >
+                Open Settings
+              </Text>
+            </Pressable>
+          ) : (
+            <Pressable
+              onPress={requestAndScan}
+              style={({ pressed }) => [
+                styles.primaryBtnBase,
+                {
+                  backgroundColor: colors.accent,
+                  transform: [{ scale: pressed ? 0.97 : 1 }],
+                },
+              ]}
+            >
+              <Text
+                style={{
+                  color: "#fff",
+                  fontFamily: fonts.sansSemibold,
+                  fontSize: 15,
+                }}
+              >
+                Grant Permission
+              </Text>
+            </Pressable>
+          )}
+          <Pressable
+            onPress={() => navigation.goBack()}
+            style={({ pressed }) => [
+              {
+                paddingVertical: 14,
+                paddingHorizontal: 24,
+                alignItems: "center",
+                marginTop: 8,
+                transform: [{ scale: pressed ? 0.97 : 1 }],
+              },
+            ]}
+          >
+            <Text
+              style={{
+                color: colors.textSecondary,
+                fontSize: 15,
+                fontFamily: fonts.sansMedium,
+              }}
+            >
+              Cancel
+            </Text>
+          </Pressable>
+        </View>
       </View>
     );
   }
@@ -471,145 +604,349 @@ export function SmsScanScreen({ navigation }: { navigation: any }) {
 
   if (scanning || permissionState === null) {
     return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#0d9488" />
-        <Text style={styles.scanText}>Scanning SMS messages...</Text>
+      <View style={{ flex: 1, backgroundColor: colors.bg }}>
+        <PageHeader title="Scan SMS" eyebrow="Parse bank SMS" />
+        <View
+          style={{
+            flex: 1,
+            justifyContent: "center",
+            alignItems: "center",
+          }}
+        >
+          <ActivityIndicator size="large" color={colors.accent} />
+          <Text
+            style={[
+              typography.caption,
+              { color: colors.textSecondary, marginTop: 16 },
+            ]}
+          >
+            Scanning SMS messages...
+          </Text>
+        </View>
       </View>
     );
   }
 
   // ── Results ──
 
+  const cardBase = {
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 14,
+  };
+
   return (
-    <View style={styles.screen}>
+    <View style={{ flex: 1, backgroundColor: colors.bg }}>
+      <PageHeader title="Scan SMS" eyebrow="Parse bank SMS" />
+
       {/* Header Stats */}
-      <View style={styles.statsRow}>
-        <View style={styles.statCard}>
-          <Text style={styles.statValue}>{newCount}</Text>
-          <Text style={styles.statLabel}>New</Text>
+      <View
+        style={{
+          flexDirection: "row",
+          gap: 10,
+          paddingHorizontal: 24,
+          paddingBottom: 10,
+        }}
+      >
+        <View style={[cardBase, { flex: 1, alignItems: "center" }]}>
+          <Text
+            style={[
+              typography.statValue,
+              { color: colors.textPrimary },
+            ]}
+          >
+            {newCount}
+          </Text>
+          <Text
+            style={[
+              typography.pillLabel,
+              { color: colors.textSecondary, marginTop: 2 },
+            ]}
+          >
+            New
+          </Text>
         </View>
-        <View style={styles.statCard}>
-          <Text style={[styles.statValue, { color: "#0d9488" }]}>
+        <View style={[cardBase, { flex: 1, alignItems: "center" }]}>
+          <Text
+            style={[typography.statValue, { color: colors.accent }]}
+          >
             {selectedCount}
           </Text>
-          <Text style={styles.statLabel}>Selected</Text>
+          <Text
+            style={[
+              typography.pillLabel,
+              { color: colors.textSecondary, marginTop: 2 },
+            ]}
+          >
+            Selected
+          </Text>
         </View>
-        <View style={styles.statCard}>
-          <Text style={[styles.statValue, { color: "#9ca3af" }]}>
+        <View style={[cardBase, { flex: 1, alignItems: "center" }]}>
+          <Text
+            style={[
+              typography.statValue,
+              { color: colors.textTertiary },
+            ]}
+          >
             {importedCount}
           </Text>
-          <Text style={styles.statLabel}>Already In</Text>
+          <Text
+            style={[
+              typography.pillLabel,
+              { color: colors.textSecondary, marginTop: 2 },
+            ]}
+          >
+            Already In
+          </Text>
         </View>
       </View>
 
       {/* Date Filter Chips */}
       {allResults.length > 0 && (
-        <View style={styles.filterSection}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
+        <View style={{ paddingHorizontal: 24, paddingBottom: 8 }}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{ gap: 8, paddingBottom: 10 }}
+          >
             {DATE_FILTERS.map((f) => {
               const isActive = activeDaysFilter === f.days;
               return (
-                <TouchableOpacity
+                <Pressable
                   key={f.label}
-                  style={[styles.filterChip, isActive && styles.filterChipActive]}
                   onPress={() => setActiveDaysFilter(f.days)}
+                  style={({ pressed }) => [
+                    {
+                      paddingHorizontal: 14,
+                      paddingVertical: 7,
+                      borderRadius: 100,
+                      backgroundColor: isActive
+                        ? colors.accent
+                        : colors.surfaceAlt,
+                      borderWidth: 1,
+                      borderColor: isActive ? colors.accent : colors.border,
+                      transform: [{ scale: pressed ? 0.97 : 1 }],
+                    },
+                  ]}
                 >
-                  <Text style={[styles.filterChipText, isActive && styles.filterChipTextActive]}>
+                  <Text
+                    style={{
+                      fontFamily: fonts.sansMedium,
+                      fontSize: 12,
+                      color: isActive ? "#fff" : colors.textSecondary,
+                    }}
+                  >
                     {f.label}
                   </Text>
-                </TouchableOpacity>
+                </Pressable>
               );
             })}
           </ScrollView>
 
           {/* Payment Mode Filter */}
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
-            {(["all", "upi", "imps", "neft", "atm", "pos", "other"] as PaymentModeFilter[]).map((mode) => {
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{ gap: 8, paddingBottom: 10 }}
+          >
+            {(
+              [
+                "all",
+                "upi",
+                "imps",
+                "neft",
+                "atm",
+                "pos",
+                "other",
+              ] as PaymentModeFilter[]
+            ).map((mode) => {
               const isActive = activePaymentMode === mode;
               const label = mode === "all" ? "All Modes" : mode.toUpperCase();
               return (
-                <TouchableOpacity
+                <Pressable
                   key={mode}
-                  style={[styles.filterChip, isActive && styles.filterChipActive]}
                   onPress={() => setActivePaymentMode(mode)}
+                  style={({ pressed }) => [
+                    {
+                      paddingHorizontal: 14,
+                      paddingVertical: 7,
+                      borderRadius: 100,
+                      backgroundColor: isActive
+                        ? colors.accent
+                        : colors.surfaceAlt,
+                      borderWidth: 1,
+                      borderColor: isActive ? colors.accent : colors.border,
+                      transform: [{ scale: pressed ? 0.97 : 1 }],
+                    },
+                  ]}
                 >
-                  <Text style={[styles.filterChipText, isActive && styles.filterChipTextActive]}>
+                  <Text
+                    style={{
+                      fontFamily: fonts.sansMedium,
+                      fontSize: 12,
+                      color: isActive ? "#fff" : colors.textSecondary,
+                    }}
+                  >
                     {label}
                   </Text>
-                </TouchableOpacity>
+                </Pressable>
               );
             })}
           </ScrollView>
 
           {/* Hidden toggle */}
-          <View style={styles.selectionRow}>
-            <TouchableOpacity
-              style={[styles.selectionBtn, showHidden && { backgroundColor: "#fef3c7" }]}
+          <View
+            style={{
+              flexDirection: "row",
+              gap: 10,
+              paddingTop: 4,
+              paddingBottom: 4,
+            }}
+          >
+            <Pressable
               onPress={() => setShowHidden((v) => !v)}
+              style={({ pressed }) => [
+                {
+                  paddingHorizontal: 12,
+                  paddingVertical: 8,
+                  borderRadius: 100,
+                  backgroundColor: showHidden
+                    ? colors.warning
+                    : colors.surfaceAlt,
+                  transform: [{ scale: pressed ? 0.97 : 1 }],
+                },
+              ]}
             >
-              <Text style={styles.selectionBtnText}>
-                {showHidden ? `Showing Hidden (${hiddenCount})` : `${hiddenCount} Hidden`}
+              <Text
+                style={{
+                  fontFamily: fonts.sansMedium,
+                  fontSize: 12,
+                  color: showHidden ? "#fff" : colors.textPrimary,
+                }}
+              >
+                {showHidden
+                  ? `Showing Hidden (${hiddenCount})`
+                  : `${hiddenCount} Hidden`}
               </Text>
-            </TouchableOpacity>
+            </Pressable>
             {showHidden && hiddenCount > 0 && (
-              <TouchableOpacity style={styles.selectionBtn} onPress={unhideAll}>
-                <Text style={[styles.selectionBtnText, { color: "#dc2626" }]}>Unhide All</Text>
-              </TouchableOpacity>
+              <Pressable
+                onPress={unhideAll}
+                style={({ pressed }) => [
+                  {
+                    paddingHorizontal: 12,
+                    paddingVertical: 8,
+                    borderRadius: 100,
+                    backgroundColor: colors.surfaceAlt,
+                    transform: [{ scale: pressed ? 0.97 : 1 }],
+                  },
+                ]}
+              >
+                <Text
+                  style={{
+                    fontFamily: fonts.sansMedium,
+                    fontSize: 12,
+                    color: colors.expense,
+                  }}
+                >
+                  Unhide All
+                </Text>
+              </Pressable>
             )}
           </View>
 
           {/* Sender Filter */}
           {senderStats.length > 1 && (
             <>
-              <TouchableOpacity
-                style={styles.senderToggle}
+              <Pressable
                 onPress={() => setShowSenderFilter((v) => !v)}
+                style={{
+                  flexDirection: "row",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  paddingVertical: 6,
+                }}
               >
-                <Text style={styles.senderToggleText}>
+                <Text
+                  style={{
+                    fontFamily: fonts.sansSemibold,
+                    fontSize: 13,
+                    color: colors.textPrimary,
+                  }}
+                >
                   {showSenderFilter ? "▼" : "▶"} Filter by Sender
-                  {activeSenders.size > 0 ? ` (${activeSenders.size} selected)` : " (All)"}
+                  {activeSenders.size > 0
+                    ? ` (${activeSenders.size} selected)`
+                    : " (All)"}
                 </Text>
                 {activeSenders.size > 0 && (
-                  <TouchableOpacity onPress={clearSenderFilter}>
-                    <Text style={styles.clearFilterText}>Clear</Text>
-                  </TouchableOpacity>
+                  <Pressable onPress={clearSenderFilter}>
+                    <Text
+                      style={{
+                        fontFamily: fonts.sansSemibold,
+                        fontSize: 12,
+                        color: colors.accent,
+                      }}
+                    >
+                      Clear
+                    </Text>
+                  </Pressable>
                 )}
-              </TouchableOpacity>
+              </Pressable>
               {showSenderFilter && (
                 <ScrollView
                   horizontal
                   showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.filterRow}
+                  contentContainerStyle={{ gap: 8, paddingBottom: 10 }}
                 >
                   {senderStats.map(({ sender, count }) => {
                     const isExplicit = activeSenders.has(sender);
                     return (
-                      <TouchableOpacity
+                      <Pressable
                         key={sender}
-                        style={[
-                          styles.senderChip,
-                          isExplicit && styles.senderChipActive,
-                        ]}
                         onPress={() => toggleSender(sender)}
+                        style={({ pressed }) => [
+                          {
+                            flexDirection: "row",
+                            alignItems: "center",
+                            gap: 6,
+                            paddingHorizontal: 12,
+                            paddingVertical: 7,
+                            borderRadius: 100,
+                            backgroundColor: isExplicit
+                              ? colors.accent
+                              : colors.surfaceAlt,
+                            borderWidth: 1,
+                            borderColor: isExplicit
+                              ? colors.accent
+                              : colors.border,
+                            transform: [{ scale: pressed ? 0.97 : 1 }],
+                          },
+                        ]}
                       >
                         <Text
-                          style={[
-                            styles.senderChipText,
-                            isExplicit && styles.senderChipTextActive,
-                          ]}
                           numberOfLines={1}
+                          style={{
+                            fontFamily: fonts.sansMedium,
+                            fontSize: 12,
+                            color: isExplicit ? "#fff" : colors.textSecondary,
+                            maxWidth: 120,
+                          }}
                         >
                           {sender}
                         </Text>
                         <Text
-                          style={[
-                            styles.senderChipCount,
-                            isExplicit && styles.senderChipTextActive,
-                          ]}
+                          style={{
+                            fontFamily: fonts.sansBold,
+                            fontSize: 11,
+                            color: isExplicit ? "#fff" : colors.textTertiary,
+                          }}
                         >
                           {count}
                         </Text>
-                      </TouchableOpacity>
+                      </Pressable>
                     );
                   })}
                 </ScrollView>
@@ -618,28 +955,106 @@ export function SmsScanScreen({ navigation }: { navigation: any }) {
           )}
 
           {/* Select All / Deselect All */}
-          <View style={styles.selectionRow}>
-            <TouchableOpacity style={styles.selectionBtn} onPress={selectAll}>
-              <Text style={styles.selectionBtnText}>Select All ({results.length})</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.selectionBtn} onPress={deselectAll}>
-              <Text style={styles.selectionBtnText}>Deselect All</Text>
-            </TouchableOpacity>
+          <View
+            style={{
+              flexDirection: "row",
+              gap: 10,
+              paddingTop: 4,
+              paddingBottom: 4,
+            }}
+          >
+            <Pressable
+              onPress={selectAll}
+              style={({ pressed }) => [
+                {
+                  paddingHorizontal: 12,
+                  paddingVertical: 8,
+                  borderRadius: 100,
+                  backgroundColor: colors.surfaceAlt,
+                  transform: [{ scale: pressed ? 0.97 : 1 }],
+                },
+              ]}
+            >
+              <Text
+                style={{
+                  fontFamily: fonts.sansMedium,
+                  fontSize: 12,
+                  color: colors.textPrimary,
+                }}
+              >
+                Select All ({results.length})
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={deselectAll}
+              style={({ pressed }) => [
+                {
+                  paddingHorizontal: 12,
+                  paddingVertical: 8,
+                  borderRadius: 100,
+                  backgroundColor: colors.surfaceAlt,
+                  transform: [{ scale: pressed ? 0.97 : 1 }],
+                },
+              ]}
+            >
+              <Text
+                style={{
+                  fontFamily: fonts.sansMedium,
+                  fontSize: 12,
+                  color: colors.textPrimary,
+                }}
+              >
+                Deselect All
+              </Text>
+            </Pressable>
           </View>
         </View>
       )}
 
       {results.length === 0 ? (
-        <View style={styles.centered}>
-          <Text style={styles.emptyText}>
+        <View
+          style={{
+            flex: 1,
+            justifyContent: "center",
+            alignItems: "center",
+            paddingHorizontal: 32,
+          }}
+        >
+          <Text
+            style={[
+              typography.body,
+              {
+                color: colors.textSecondary,
+                textAlign: "center",
+                marginBottom: 16,
+              },
+            ]}
+          >
             {allResults.length > 0
               ? "No transactions found for this date range."
               : "No bank transaction SMS found."}
           </Text>
           {allResults.length === 0 && (
-            <TouchableOpacity style={styles.primaryBtn} onPress={startScan}>
-              <Text style={styles.primaryBtnText}>Scan Again</Text>
-            </TouchableOpacity>
+            <Pressable
+              onPress={startScan}
+              style={({ pressed }) => [
+                styles.primaryBtnBase,
+                {
+                  backgroundColor: colors.accent,
+                  transform: [{ scale: pressed ? 0.97 : 1 }],
+                },
+              ]}
+            >
+              <Text
+                style={{
+                  color: "#fff",
+                  fontFamily: fonts.sansSemibold,
+                  fontSize: 15,
+                }}
+              >
+                Scan Again
+              </Text>
+            </Pressable>
           )}
         </View>
       ) : (
@@ -647,165 +1062,370 @@ export function SmsScanScreen({ navigation }: { navigation: any }) {
           <FlatList
             data={results}
             keyExtractor={(_, i) => i.toString()}
-            contentContainerStyle={styles.listContent}
-            renderItem={({ item, index }) => (
-              <TouchableOpacity
-                style={[
-                  styles.txnCard,
-                  item.selected && styles.txnCardSelected,
-                  item.alreadyImported && styles.txnCardImported,
-                ]}
-                onPress={() => !item.alreadyImported && toggleSelect(index)}
-                activeOpacity={item.alreadyImported ? 1 : 0.7}
-              >
-                {/* Already imported banner */}
-                {item.alreadyImported && (
-                  <View style={styles.importedBanner}>
-                    <Text style={styles.importedBannerText}>Already in Dashboard</Text>
-                  </View>
-                )}
-
-                <View style={styles.txnHeader}>
-                  <View
-                    style={[
-                      styles.typeBadge,
-                      {
-                        backgroundColor:
-                          item.type === "debit" ? "#fee2e2" : "#dcfce7",
-                      },
-                    ]}
-                  >
-                    <Text
-                      style={{
-                        fontSize: 11,
-                        fontWeight: "600",
-                        color: item.type === "debit" ? "#dc2626" : "#16a34a",
-                      }}
-                    >
-                      {item.type === "debit" ? "EXPENSE" : "INCOME"}
-                    </Text>
-                  </View>
-                  {item.paymentMode && (
-                    <View style={styles.modeBadge}>
-                      <Text style={styles.modeBadgeText}>{item.paymentMode}</Text>
-                    </View>
-                  )}
-                  <Text style={styles.txnDate}>{formatDate(item.date)}</Text>
-                </View>
-
-                <Text
-                  style={[
-                    styles.txnAmount,
-                    { color: item.alreadyImported ? "#9ca3af" : item.type === "debit" ? "#dc2626" : "#16a34a" },
+            contentContainerStyle={{
+              paddingBottom: navHeight + 80 + insets.bottom,
+              paddingHorizontal: 24,
+            }}
+            renderItem={({ item, index }) => {
+              const typeColor =
+                item.type === "debit" ? colors.expense : colors.income;
+              return (
+                <Pressable
+                  onPress={() =>
+                    !item.alreadyImported && toggleSelect(index)
+                  }
+                  disabled={item.alreadyImported}
+                  style={({ pressed }) => [
+                    {
+                      backgroundColor: item.selected
+                        ? colors.accentLight
+                        : colors.surface,
+                      borderRadius: 12,
+                      padding: 14,
+                      marginBottom: 10,
+                      borderWidth: 1,
+                      borderColor: item.selected
+                        ? colors.accent
+                        : colors.border,
+                      opacity: item.alreadyImported ? 0.55 : 1,
+                      transform: [
+                        {
+                          scale:
+                            pressed && !item.alreadyImported ? 0.97 : 1,
+                        },
+                      ],
+                      position: "relative",
+                    },
                   ]}
                 >
-                  {item.type === "debit" ? "-" : "+"}
-                  {formatCurrency(item.amount)}
-                </Text>
-
-                {/* Merchant / Description */}
-                {item.description && (
-                  <Text style={styles.txnDesc} numberOfLines={1}>
-                    {item.description}
-                  </Text>
-                )}
-
-                {/* Extra details row */}
-                <View style={styles.detailsRow}>
-                  {item.upiRemark && item.upiRemark !== item.merchantName && (
-                    <View style={styles.detailChip}>
-                      <Text style={styles.detailChipText} numberOfLines={1}>
-                        "{item.upiRemark}"
-                      </Text>
-                    </View>
-                  )}
-                  {item.upiId && (
-                    <View style={styles.detailChip}>
-                      <Text style={styles.detailChipText} numberOfLines={1}>
-                        {item.upiId}
-                      </Text>
-                    </View>
-                  )}
-                  {item.accountHint && (
-                    <View style={styles.detailChip}>
-                      <Text style={styles.detailChipText}>A/c •••{item.accountHint}</Text>
-                    </View>
-                  )}
-                  {item.recipientAccount && (
-                    <View style={styles.detailChip}>
-                      <Text style={styles.detailChipText}>To •••{item.recipientAccount}</Text>
-                    </View>
-                  )}
-                  {item.bankName && (
-                    <View style={styles.detailChip}>
-                      <Text style={styles.detailChipText}>{item.bankName}</Text>
-                    </View>
-                  )}
-                </View>
-
-                {!item.alreadyImported && !item.hidden && (
-                  <View style={styles.cardActions}>
-                    <TouchableOpacity
-                      style={[styles.categoryBtn, { flex: 1 }]}
-                      onPress={() => openCategoryPicker(index)}
+                  {/* Already imported banner */}
+                  {item.alreadyImported && (
+                    <View
+                      style={{
+                        backgroundColor: colors.surfaceAlt,
+                        borderRadius: 6,
+                        paddingHorizontal: 10,
+                        paddingVertical: 4,
+                        alignSelf: "flex-start",
+                        marginBottom: 8,
+                      }}
                     >
-                      <Text style={styles.categoryBtnText}>
-                        {getCategoryLabel(item.assignedCategory, item.type)}
+                      <Text
+                        style={{
+                          fontFamily: fonts.sansSemibold,
+                          fontSize: 11,
+                          color: colors.textSecondary,
+                        }}
+                      >
+                        Already in Dashboard
                       </Text>
-                      <Text style={styles.categoryBtnArrow}>Change</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={styles.hideBtn}
-                      onPress={() => hideTransaction(index)}
-                    >
-                      <Text style={styles.hideBtnText}>Hide</Text>
-                    </TouchableOpacity>
-                  </View>
-                )}
+                    </View>
+                  )}
 
-                {/* Hidden label */}
-                {item.hidden && (
-                  <View style={styles.hiddenLabel}>
-                    <Text style={styles.hiddenLabelText}>Hidden — not a real transaction</Text>
-                  </View>
-                )}
-
-                {/* Selection indicator */}
-                {!item.alreadyImported && !item.hidden && (
                   <View
-                    style={[
-                      styles.checkbox,
-                      item.selected && styles.checkboxChecked,
-                    ]}
+                    style={{
+                      flexDirection: "row",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      marginBottom: 6,
+                    }}
                   >
-                    {item.selected && (
-                      <Text style={styles.checkmark}>✓</Text>
+                    <View
+                      style={{
+                        paddingHorizontal: 8,
+                        paddingVertical: 3,
+                        borderRadius: 6,
+                        backgroundColor:
+                          item.type === "debit"
+                            ? colors.expenseLight
+                            : colors.incomeLight,
+                      }}
+                    >
+                      <Text
+                        style={{
+                          fontFamily: fonts.sansSemibold,
+                          fontSize: 11,
+                          color: typeColor,
+                        }}
+                      >
+                        {item.type === "debit" ? "EXPENSE" : "INCOME"}
+                      </Text>
+                    </View>
+                    {item.paymentMode && (
+                      <View
+                        style={{
+                          backgroundColor: colors.surfaceAlt,
+                          paddingHorizontal: 7,
+                          paddingVertical: 2,
+                          borderRadius: 4,
+                        }}
+                      >
+                        <Text
+                          style={{
+                            fontFamily: fonts.sansSemibold,
+                            fontSize: 10,
+                            color: colors.textSecondary,
+                          }}
+                        >
+                          {item.paymentMode}
+                        </Text>
+                      </View>
+                    )}
+                    <Text
+                      style={{
+                        fontFamily: fonts.sans,
+                        fontSize: 12,
+                        color: colors.textTertiary,
+                      }}
+                    >
+                      {formatDate(item.date)}
+                    </Text>
+                  </View>
+
+                  <Text
+                    style={{
+                      fontFamily: fonts.sansBold,
+                      fontSize: 20,
+                      color: item.alreadyImported
+                        ? colors.textTertiary
+                        : typeColor,
+                      marginBottom: 4,
+                    }}
+                  >
+                    {item.type === "debit" ? "-" : "+"}
+                    {formatINR(item.amount)}
+                  </Text>
+
+                  {item.description && (
+                    <Text
+                      numberOfLines={1}
+                      style={{
+                        fontFamily: fonts.sans,
+                        fontSize: 13,
+                        color: colors.textSecondary,
+                        marginBottom: 8,
+                      }}
+                    >
+                      {item.description}
+                    </Text>
+                  )}
+
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      flexWrap: "wrap",
+                      gap: 6,
+                      marginBottom: 8,
+                      marginTop: 4,
+                    }}
+                  >
+                    {item.upiRemark &&
+                      item.upiRemark !== item.merchantName && (
+                        <DetailChip
+                          text={`"${item.upiRemark}"`}
+                          colors={colors}
+                        />
+                      )}
+                    {item.upiId && (
+                      <DetailChip text={item.upiId} colors={colors} />
+                    )}
+                    {item.accountHint && (
+                      <DetailChip
+                        text={`A/c •••${item.accountHint}`}
+                        colors={colors}
+                      />
+                    )}
+                    {item.recipientAccount && (
+                      <DetailChip
+                        text={`To •••${item.recipientAccount}`}
+                        colors={colors}
+                      />
+                    )}
+                    {item.bankName && (
+                      <DetailChip text={item.bankName} colors={colors} />
                     )}
                   </View>
-                )}
-              </TouchableOpacity>
-            )}
+
+                  {!item.alreadyImported && !item.hidden && (
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        gap: 8,
+                        alignItems: "center",
+                      }}
+                    >
+                      <Pressable
+                        onPress={() => openCategoryPicker(index)}
+                        style={({ pressed }) => [
+                          {
+                            flex: 1,
+                            flexDirection: "row",
+                            justifyContent: "space-between",
+                            backgroundColor: colors.surfaceAlt,
+                            borderRadius: 100,
+                            paddingHorizontal: 12,
+                            paddingVertical: 8,
+                            transform: [{ scale: pressed ? 0.97 : 1 }],
+                          },
+                        ]}
+                      >
+                        <Text
+                          style={{
+                            fontFamily: fonts.sansMedium,
+                            fontSize: 13,
+                            color: colors.textPrimary,
+                          }}
+                        >
+                          {getCategoryLabel(item.assignedCategory, item.type)}
+                        </Text>
+                        <Text
+                          style={{
+                            fontFamily: fonts.sansSemibold,
+                            fontSize: 12,
+                            color: colors.accent,
+                          }}
+                        >
+                          Change
+                        </Text>
+                      </Pressable>
+                      <Pressable
+                        onPress={() => hideTransaction(index)}
+                        style={({ pressed }) => [
+                          {
+                            backgroundColor: colors.surfaceAlt,
+                            borderRadius: 100,
+                            paddingHorizontal: 12,
+                            paddingVertical: 8,
+                            borderWidth: 1,
+                            borderColor: colors.border,
+                            transform: [{ scale: pressed ? 0.97 : 1 }],
+                          },
+                        ]}
+                      >
+                        <Text
+                          style={{
+                            fontFamily: fonts.sansSemibold,
+                            fontSize: 12,
+                            color: colors.textTertiary,
+                          }}
+                        >
+                          Hide
+                        </Text>
+                      </Pressable>
+                    </View>
+                  )}
+
+                  {item.hidden && (
+                    <View
+                      style={{
+                        backgroundColor: colors.surfaceAlt,
+                        borderRadius: 6,
+                        paddingHorizontal: 10,
+                        paddingVertical: 5,
+                        alignSelf: "flex-start",
+                      }}
+                    >
+                      <Text
+                        style={{
+                          fontFamily: fonts.sans,
+                          fontSize: 11,
+                          color: colors.textTertiary,
+                          fontStyle: "italic",
+                        }}
+                      >
+                        Hidden — not a real transaction
+                      </Text>
+                    </View>
+                  )}
+
+                  {/* Selection indicator */}
+                  {!item.alreadyImported && !item.hidden && (
+                    <View
+                      style={{
+                        position: "absolute",
+                        top: 14,
+                        right: 14,
+                        width: 22,
+                        height: 22,
+                        borderRadius: 11,
+                        borderWidth: 2,
+                        borderColor: item.selected
+                          ? colors.accent
+                          : colors.border,
+                        backgroundColor: item.selected
+                          ? colors.accent
+                          : "transparent",
+                        justifyContent: "center",
+                        alignItems: "center",
+                      }}
+                    >
+                      {item.selected && (
+                        <Text
+                          style={{
+                            color: "#fff",
+                            fontSize: 13,
+                            fontFamily: fonts.sansBold,
+                          }}
+                        >
+                          ✓
+                        </Text>
+                      )}
+                    </View>
+                  )}
+                </Pressable>
+              );
+            }}
           />
 
           {/* Bottom Action Bar */}
-          <View style={styles.bottomBar}>
-            <TouchableOpacity
-              style={[
-                styles.primaryBtn,
-                { flex: 1 },
-                (selectedCount === 0 || importing) && styles.btnDisabled,
-              ]}
+          <View
+            style={{
+              position: "absolute",
+              bottom: 0,
+              left: 0,
+              right: 0,
+              padding: 16,
+              paddingBottom: 16 + insets.bottom,
+              paddingHorizontal: 24,
+              backgroundColor: colors.bg,
+              borderTopWidth: 1,
+              borderTopColor: colors.border,
+              flexDirection: "row",
+              gap: 12,
+            }}
+          >
+            <Pressable
               onPress={handleImport}
               disabled={selectedCount === 0 || importing}
+              style={({ pressed }) => [
+                {
+                  flex: 1,
+                  backgroundColor: colors.accent,
+                  borderRadius: 100,
+                  paddingVertical: 14,
+                  paddingHorizontal: 24,
+                  alignItems: "center",
+                  opacity:
+                    selectedCount === 0 || importing ? 0.5 : 1,
+                  transform: [{ scale: pressed ? 0.97 : 1 }],
+                },
+              ]}
             >
               {importing ? (
                 <ActivityIndicator size="small" color="#fff" />
               ) : (
-                <Text style={styles.primaryBtnText}>
-                  Import {selectedCount} Transaction{selectedCount !== 1 ? "s" : ""}
+                <Text
+                  style={{
+                    color: "#fff",
+                    fontFamily: fonts.sansSemibold,
+                    fontSize: 15,
+                  }}
+                >
+                  Import {selectedCount} Transaction
+                  {selectedCount !== 1 ? "s" : ""}
                 </Text>
               )}
-            </TouchableOpacity>
+            </Pressable>
           </View>
         </>
       )}
@@ -815,8 +1435,14 @@ export function SmsScanScreen({ navigation }: { navigation: any }) {
         title="Select Category"
         options={
           activeResultIdx >= 0 && results[activeResultIdx]?.type === "credit"
-            ? INCOME_CATEGORIES.map((c) => ({ label: c.label, value: c.value }))
-            : EXPENSE_CATEGORIES.map((c) => ({ label: c.label, value: c.value }))
+            ? INCOME_CATEGORIES.map((c) => ({
+                label: c.label,
+                value: c.value,
+              }))
+            : EXPENSE_CATEGORIES.map((c) => ({
+                label: c.label,
+                value: c.value,
+              }))
         }
         selectedValue={
           activeResultIdx >= 0
@@ -830,301 +1456,42 @@ export function SmsScanScreen({ navigation }: { navigation: any }) {
   );
 }
 
+function DetailChip({
+  text,
+  colors,
+}: {
+  text: string;
+  colors: any;
+}) {
+  return (
+    <View
+      style={{
+        backgroundColor: colors.surfaceAlt,
+        borderRadius: 6,
+        paddingHorizontal: 8,
+        paddingVertical: 3,
+      }}
+    >
+      <Text
+        numberOfLines={1}
+        style={{
+          fontFamily: fonts.sans,
+          fontSize: 11,
+          color: colors.textSecondary,
+          maxWidth: 180,
+        }}
+      >
+        {text}
+      </Text>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: "#fff" },
-  centered: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 32,
-    backgroundColor: "#fff",
-  },
-  statsRow: {
-    flexDirection: "row",
-    gap: 12,
-    padding: 16,
-    paddingBottom: 8,
-  },
-  statCard: {
-    flex: 1,
-    backgroundColor: "#f3f4f6",
-    borderRadius: 12,
-    padding: 12,
-    alignItems: "center",
-  },
-  statValue: { fontSize: 24, fontWeight: "700", color: "#1f2937" },
-  statLabel: { fontSize: 12, color: "#6b7280", marginTop: 2 },
-  filterSection: {
-    paddingHorizontal: 16,
-    paddingBottom: 8,
-  },
-  filterRow: {
-    flexDirection: "row",
-    gap: 8,
-    paddingBottom: 10,
-  },
-  filterChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-    borderRadius: 20,
-    backgroundColor: "#f3f4f6",
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
-  },
-  filterChipActive: {
-    backgroundColor: "#0d9488",
-    borderColor: "#0d9488",
-  },
-  filterChipText: {
-    fontSize: 13,
-    fontWeight: "500",
-    color: "#6b7280",
-  },
-  filterChipTextActive: {
-    color: "#fff",
-  },
-  senderToggle: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingVertical: 6,
-  },
-  senderToggleText: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: "#374151",
-  },
-  clearFilterText: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: "#0d9488",
-  },
-  senderChip: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 20,
-    backgroundColor: "#f3f4f6",
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
-  },
-  senderChipActive: {
-    backgroundColor: "#0d9488",
-    borderColor: "#0d9488",
-  },
-  senderChipText: {
-    fontSize: 12,
-    fontWeight: "500",
-    color: "#6b7280",
-    maxWidth: 120,
-  },
-  senderChipTextActive: {
-    color: "#fff",
-  },
-  senderChipCount: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: "#9ca3af",
-  },
-  selectionRow: {
-    flexDirection: "row",
-    gap: 10,
-    paddingTop: 4,
-    paddingBottom: 4,
-  },
-  selectionBtn: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-    backgroundColor: "#e5e7eb",
-  },
-  selectionBtnText: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: "#374151",
-  },
-  listContent: { padding: 16, paddingBottom: 100 },
-  txnCard: {
-    backgroundColor: "#f9fafb",
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 10,
-    borderWidth: 2,
-    borderColor: "transparent",
-    position: "relative",
-  },
-  txnCardSelected: {
-    borderColor: "#0d9488",
-    backgroundColor: "#f0fdfa",
-  },
-  txnCardImported: {
-    opacity: 0.55,
-    borderColor: "#e5e7eb",
-    backgroundColor: "#f9fafb",
-  },
-  importedBanner: {
-    backgroundColor: "#e5e7eb",
-    borderRadius: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    alignSelf: "flex-start",
-    marginBottom: 8,
-  },
-  importedBannerText: {
-    fontSize: 11,
-    fontWeight: "600",
-    color: "#6b7280",
-  },
-  modeBadge: {
-    backgroundColor: "#ede9fe",
-    paddingHorizontal: 7,
-    paddingVertical: 2,
-    borderRadius: 4,
-  },
-  modeBadgeText: {
-    fontSize: 10,
-    fontWeight: "600",
-    color: "#7c3aed",
-  },
-  detailsRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 6,
-    marginBottom: 8,
-    marginTop: 4,
-  },
-  detailChip: {
-    backgroundColor: "#f3f4f6",
-    borderRadius: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-  },
-  detailChipText: {
-    fontSize: 11,
-    color: "#4b5563",
-    maxWidth: 180,
-  },
-  txnHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 6,
-  },
-  typeBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-  },
-  txnDate: { fontSize: 12, color: "#6b7280" },
-  txnAmount: { fontSize: 20, fontWeight: "700", marginBottom: 4 },
-  txnDesc: { fontSize: 13, color: "#4b5563", marginBottom: 8 },
-  cardActions: {
-    flexDirection: "row",
-    gap: 8,
-    alignItems: "center",
-  },
-  hideBtn: {
-    backgroundColor: "#f3f4f6",
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
-  },
-  hideBtnText: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: "#9ca3af",
-  },
-  hiddenLabel: {
-    backgroundColor: "#f3f4f6",
-    borderRadius: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    alignSelf: "flex-start",
-  },
-  hiddenLabelText: {
-    fontSize: 11,
-    color: "#9ca3af",
-    fontStyle: "italic",
-  },
-  categoryBtn: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    backgroundColor: "#e5e7eb",
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  categoryBtnText: { fontSize: 13, fontWeight: "500", color: "#374151" },
-  categoryBtnArrow: { fontSize: 12, color: "#0d9488", fontWeight: "600" },
-  checkbox: {
-    position: "absolute",
-    top: 14,
-    right: 14,
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    borderWidth: 2,
-    borderColor: "#d1d5db",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  checkboxChecked: {
-    backgroundColor: "#0d9488",
-    borderColor: "#0d9488",
-  },
-  checkmark: { color: "#fff", fontSize: 13, fontWeight: "bold" },
-  bottomBar: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    padding: 16,
-    backgroundColor: "#fff",
-    borderTopWidth: 1,
-    borderTopColor: "#e5e7eb",
-    flexDirection: "row",
-    gap: 12,
-  },
-  primaryBtn: {
-    backgroundColor: "#0d9488",
-    borderRadius: 12,
+  primaryBtnBase: {
+    borderRadius: 100,
     paddingVertical: 14,
     paddingHorizontal: 24,
     alignItems: "center",
-  },
-  primaryBtnText: { color: "#fff", fontSize: 15, fontWeight: "600" },
-  secondaryBtn: {
-    borderRadius: 12,
-    paddingVertical: 14,
-    paddingHorizontal: 24,
-    alignItems: "center",
-    marginTop: 8,
-  },
-  secondaryBtnText: { color: "#6b7280", fontSize: 15, fontWeight: "500" },
-  btnDisabled: { opacity: 0.5 },
-  permTitle: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: "#1f2937",
-    marginBottom: 12,
-    textAlign: "center",
-  },
-  permDesc: {
-    fontSize: 14,
-    color: "#6b7280",
-    textAlign: "center",
-    lineHeight: 20,
-    marginBottom: 24,
-  },
-  scanText: { fontSize: 14, color: "#6b7280", marginTop: 16 },
-  emptyText: {
-    fontSize: 14,
-    color: "#6b7280",
-    textAlign: "center",
-    marginBottom: 16,
   },
 });

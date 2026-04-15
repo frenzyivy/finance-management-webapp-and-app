@@ -7,6 +7,7 @@ import { format, differenceInDays } from "date-fns";
 import { FileText, Image as ImageIcon, ExternalLink, Trash2, ArrowLeft, ShoppingBag, Clock } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/client";
+import { PageHeader } from "@/components/layout/PageHeader";
 import { useBnplParser } from "@/hooks/use-bnpl-parser";
 import { formatCurrency } from "@/lib/utils/currency";
 import type { BnplPurchase, BnplInvoiceFile } from "@/types/bnpl";
@@ -82,24 +83,20 @@ export default function InvoicesPage() {
   const totalFiles = purchases.reduce((sum, p) => sum + (p.invoice_files?.length ?? 0), 0);
 
   return (
-    <div className="flex flex-col gap-6 p-4 sm:p-6">
-      {/* Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex flex-col gap-1">
-          <div className="flex items-center gap-2">
-            <Link
-              href="/debts"
-              className="text-muted-foreground hover:text-foreground transition-colors"
-            >
-              <ArrowLeft className="size-4" />
-            </Link>
-            <h1 className="text-2xl font-semibold">Invoice Archive</h1>
-          </div>
-          <p className="text-sm text-muted-foreground">
-            {totalFiles} invoice{totalFiles === 1 ? "" : "s"} across {purchases.length} purchase{purchases.length === 1 ? "" : "s"}. Files expire after 120 days.
-          </p>
-        </div>
+    <div className="flex flex-col">
+      <div className="animate d1">
+        <PageHeader
+          title="Invoices"
+          eyebrow={`${totalFiles} file${totalFiles === 1 ? "" : "s"} · expires 120d`}
+        />
       </div>
+      <div className="px-6 space-y-6">
+      <Link
+        href="/debts"
+        className="inline-flex items-center gap-1.5 text-[13px] text-[var(--text-secondary)]"
+      >
+        <ArrowLeft className="size-3.5" /> Back to Debts
+      </Link>
 
       {loading ? (
         <div className="text-sm text-muted-foreground">Loading...</div>
@@ -150,6 +147,7 @@ export default function InvoicesPage() {
           ))}
         </div>
       )}
+      </div>
     </div>
   );
 }

@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
+import { PageHeader } from "@/components/layout/PageHeader";
 import { useImportedTransactions } from "@/hooks/use-imported-transactions";
 import { formatCurrency } from "@/lib/utils/currency";
 import { formatDate } from "@/lib/utils/date";
@@ -204,13 +205,14 @@ export default function ImportsPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Import Transactions</h1>
-        <p className="text-muted-foreground">
-          Upload bank statements to import transactions automatically
-        </p>
+    <div className="flex flex-col">
+      <div className="animate d1">
+        <PageHeader
+          title="Imports"
+          eyebrow="Bank statements, SMS, CSV"
+        />
       </div>
+      <div className="px-6 space-y-6">
 
       {/* Summary Cards */}
       <div className="grid gap-4 sm:grid-cols-3">
@@ -603,6 +605,7 @@ export default function ImportsPage() {
           )}
         </TabsContent>
       </Tabs>
+      </div>
     </div>
   );
 }

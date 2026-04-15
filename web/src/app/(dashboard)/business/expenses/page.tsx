@@ -15,6 +15,7 @@ import type { BusinessExpense } from "@/types/business";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { PageHeader } from "@/components/layout/PageHeader";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
@@ -83,11 +84,18 @@ function BusinessExpensesContent() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold tracking-tight">Business Expenses</h2>
-        <Button onClick={openAddDialog}><Plus className="size-4" /> Add Expense</Button>
+    <div className="flex flex-col">
+      <div className="animate d1">
+        <PageHeader
+          title="Business Expenses"
+          actions={
+            <Button onClick={openAddDialog}>
+              <Plus className="size-4" /> Add
+            </Button>
+          }
+        />
       </div>
+      <div className="px-6 space-y-6">
 
       {subscriptionIdFilter && (
         <div className="flex items-center justify-between rounded-lg border border-border bg-muted/40 px-4 py-2">
@@ -206,6 +214,7 @@ function BusinessExpensesContent() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      </div>
     </div>
   );
 }

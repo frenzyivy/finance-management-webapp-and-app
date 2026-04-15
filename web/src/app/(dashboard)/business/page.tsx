@@ -14,6 +14,7 @@ import {
   Plus,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { PageHeader } from "@/components/layout/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { formatCurrency } from "@/lib/utils/currency";
@@ -269,23 +270,11 @@ export default function BusinessDashboardPage() {
   }, []);
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-100 dark:bg-blue-950">
-              <Briefcase className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-            </div>
-            <div>
-              <h2 className="text-2xl font-bold tracking-tight">Allianza Biz</h2>
-              <p className="text-muted-foreground">
-                Business finance overview
-              </p>
-            </div>
-          </div>
-        </div>
+    <div className="flex flex-col">
+      <div className="animate d1">
+        <PageHeader title="Allianza Biz" eyebrow="Business finance overview" />
       </div>
+      <div className="px-6 space-y-6">
 
       {/* Quick Actions */}
       <div className="flex flex-wrap gap-2">
@@ -438,6 +427,7 @@ export default function BusinessDashboardPage() {
             ))}
           </div>
         )}
+      </div>
       </div>
     </div>
   );

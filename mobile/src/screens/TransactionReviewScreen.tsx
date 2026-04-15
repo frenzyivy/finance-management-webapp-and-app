@@ -4,22 +4,31 @@ import {
   Text,
   StyleSheet,
   FlatList,
-  TouchableOpacity,
+  Pressable,
   ActivityIndicator,
   Alert,
   RefreshControl,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { format } from "date-fns";
 import { supabase } from "../lib/supabase";
 import { useSyncStore } from "../lib/sync-store";
-import { formatCurrency, formatDate } from "../lib/format";
 import {
   EXPENSE_CATEGORIES,
   INCOME_CATEGORIES,
   PAYMENT_METHODS,
 } from "../lib/constants";
 import { PickerModal } from "../components/PickerModal";
-import type { LocalParsedTransaction, ImportedTransaction } from "../types/database";
+import { useTheme } from "../lib/theme-context";
+import { text as typography, fonts } from "../lib/typography";
+import { radii, navHeight } from "../lib/radii";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { PageHeader } from "../components/PageHeader";
+import { formatINR, TransactionCard } from "../components/komal";
+import type {
+  LocalParsedTransaction,
+  ImportedTransaction,
+} from "../types/database";
 
 const LOCAL_STAGING_KEY = "komalfin_pending_imports";
 
@@ -64,6 +73,8 @@ function toImportedTransaction(t: LocalParsedTransaction): ImportedTransaction {
 }
 
 export function TransactionReviewScreen({ navigation }: { navigation: any }) {
+  const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
   const syncVersion = useSyncStore((s) => s.syncVersion);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -161,9 +172,7 @@ export function TransactionReviewScreen({ navigation }: { navigation: any }) {
 
       if (res.ok) {
         // Remove from local staging
-        const remaining = localItems.filter(
-          (t) => t.local_id !== entry.id
-        );
+        const remaining = localItems.filter((t) => t.local_id !== entry.id);
         setLocalItems(remaining);
         setEntries(remaining.map(toImportedTransaction));
         // Persist updated staging
@@ -183,61 +192,89 @@ export function TransactionReviewScreen({ navigation }: { navigation: any }) {
   }
 
   async function handleReject(entryId: string) {
-    Alert.alert("Reject Transaction", "This will remove it from your device. It was never sent to any server.", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Remove",
-        style: "destructive",
-        onPress: async () => {
-          // Remove from local staging only — data never leaves the device
-          const remaining = localItems.filter((t) => t.local_id !== entryId);
-          setLocalItems(remaining);
-          setEntries(remaining.map(toImportedTransaction));
-          const allStaged = await loadLocalStaging();
-          await saveLocalStaging(
-            allStaged.filter((t) => t.local_id !== entryId)
-          );
+    Alert.alert(
+      "Reject Transaction",
+      "This will remove it from your device. It was never sent to any server.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Remove",
+          style: "destructive",
+          onPress: async () => {
+            // Remove from local staging only — data never leaves the device
+            const remaining = localItems.filter((t) => t.local_id !== entryId);
+            setLocalItems(remaining);
+            setEntries(remaining.map(toImportedTransaction));
+            const allStaged = await loadLocalStaging();
+            await saveLocalStaging(
+              allStaged.filter((t) => t.local_id !== entryId)
+            );
+          },
         },
-      },
-    ]);
+      ]
+    );
   }
 
   const activeEntry = entries.find((e) => e.id === activeEntryId);
 
   if (loading) {
     return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#0d9488" />
+      <View style={[styles.centered, { backgroundColor: colors.bg }]}>
+        <ActivityIndicator size="large" color={colors.accent} />
       </View>
     );
   }
 
   return (
-    <View style={styles.screen}>
+    <View style={{ flex: 1, backgroundColor: colors.bg }}>
+      <PageHeader title="Review Imports" />
+
       {/* Stats */}
-      <View style={styles.statsBar}>
-        <Text style={styles.statsText}>
+      <View style={{ paddingHorizontal: 24, paddingBottom: 12 }}>
+        <Text
+          style={[
+            typography.caption,
+            { color: colors.textSecondary },
+          ]}
+        >
           {entries.length} pending transaction{entries.length !== 1 ? "s" : ""}
           {" (on device only)"}
         </Text>
       </View>
 
       {entries.length === 0 ? (
-        <View style={styles.centered}>
-          <Text style={styles.emptyIcon}>✅</Text>
-          <Text style={styles.emptyTitle}>All caught up!</Text>
-          <Text style={styles.emptyDesc}>No pending transactions to review.</Text>
+        <View style={[styles.centered, { paddingHorizontal: 32 }]}>
+          <Text style={{ fontSize: 48, marginBottom: 12 }}>✅</Text>
+          <Text
+            style={[
+              typography.sectionTitle,
+              { color: colors.textPrimary, marginBottom: 8 },
+            ]}
+          >
+            All caught up!
+          </Text>
+          <Text
+            style={[
+              typography.body,
+              { color: colors.textSecondary },
+            ]}
+          >
+            No pending transactions to review.
+          </Text>
         </View>
       ) : (
         <FlatList
           data={entries}
           keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.listContent}
+          contentContainerStyle={{
+            paddingBottom: navHeight + 40 + insets.bottom,
+            paddingHorizontal: 24,
+          }}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
               onRefresh={onRefresh}
-              tintColor="#0d9488"
+              tintColor={colors.accent}
             />
           }
           renderItem={({ item }) => {
@@ -245,105 +282,91 @@ export function TransactionReviewScreen({ navigation }: { navigation: any }) {
               categoryMap[item.id] ||
               item.assigned_category ||
               (item.parsed_type === "debit" ? "miscellaneous" : "other");
+            const kind = item.parsed_type === "debit" ? "expense" : "income";
 
             return (
-              <View style={styles.card}>
-                <View style={styles.cardHeader}>
-                  <View
-                    style={[
-                      styles.typeBadge,
-                      {
-                        backgroundColor:
-                          item.parsed_type === "debit" ? "#fee2e2" : "#dcfce7",
-                      },
-                    ]}
-                  >
-                    <Text
-                      style={{
-                        fontSize: 11,
-                        fontWeight: "600",
-                        color:
-                          item.parsed_type === "debit" ? "#dc2626" : "#16a34a",
-                      }}
-                    >
-                      {item.parsed_type === "debit" ? "EXPENSE" : "INCOME"}
-                    </Text>
-                  </View>
-                  <Text style={styles.cardDate}>
-                    {formatDate(item.parsed_date)}
-                  </Text>
-                  <View
-                    style={[
-                      styles.sourceBadge,
-                      {
-                        backgroundColor:
-                          item.import_source === "sms" ? "#ede9fe" : "#e0f2fe",
-                      },
-                    ]}
-                  >
-                    <Text
-                      style={{
-                        fontSize: 10,
-                        fontWeight: "600",
-                        color:
-                          item.import_source === "sms" ? "#7c3aed" : "#0284c7",
-                      }}
-                    >
-                      {item.import_source === "sms" ? "SMS" : "Statement"}
-                    </Text>
-                  </View>
+              <View style={{ marginBottom: 14 }}>
+                {/* Use TransactionCard — override its horizontal margin via wrapper */}
+                <View style={{ marginHorizontal: -24 }}>
+                  <TransactionCard
+                    name={
+                      item.parsed_description ||
+                      item.parsed_reference ||
+                      "Unknown"
+                    }
+                    kind={kind}
+                    category={item.parsed_type === "debit" ? cat : cat}
+                    categoryLabel={getCategoryLabel(cat, item.parsed_type)}
+                    metaTag={
+                      item.import_source === "sms" ? "SMS" : "Statement"
+                    }
+                    metaTagTone="muted"
+                    date={format(new Date(item.parsed_date), "d MMM")}
+                    amount={item.parsed_amount}
+                    onPress={() => openCategoryPicker(item.id)}
+                  />
                 </View>
 
-                <Text
-                  style={[
-                    styles.cardAmount,
-                    {
-                      color:
-                        item.parsed_type === "debit" ? "#dc2626" : "#16a34a",
-                    },
-                  ]}
-                >
-                  {item.parsed_type === "debit" ? "-" : "+"}
-                  {formatCurrency(item.parsed_amount)}
-                </Text>
-
-                {item.parsed_description && (
-                  <Text style={styles.cardDesc} numberOfLines={2}>
-                    {item.parsed_description}
-                  </Text>
-                )}
-
-                {/* Category Selector */}
-                <TouchableOpacity
-                  style={styles.categoryRow}
-                  onPress={() => openCategoryPicker(item.id)}
-                >
-                  <Text style={styles.categoryLabel}>Category:</Text>
-                  <Text style={styles.categoryValue}>
-                    {getCategoryLabel(cat, item.parsed_type)}
-                  </Text>
-                  <Text style={styles.changeText}>Change</Text>
-                </TouchableOpacity>
-
                 {/* Action Buttons */}
-                <View style={styles.actionRow}>
-                  <TouchableOpacity
-                    style={[styles.approveBtn, approvingId === item.id && styles.btnDisabled]}
+                <View
+                  style={{
+                    flexDirection: "row",
+                    gap: 10,
+                    marginTop: 8,
+                  }}
+                >
+                  <Pressable
                     onPress={() => handleApprove(item)}
                     disabled={approvingId === item.id}
+                    style={({ pressed }) => [
+                      {
+                        flex: 1,
+                        backgroundColor: colors.accent,
+                        borderRadius: 100,
+                        paddingVertical: 12,
+                        alignItems: "center",
+                        opacity: approvingId === item.id ? 0.5 : 1,
+                        transform: [{ scale: pressed ? 0.97 : 1 }],
+                      },
+                    ]}
                   >
                     {approvingId === item.id ? (
                       <ActivityIndicator size="small" color="#fff" />
                     ) : (
-                      <Text style={styles.approveBtnText}>Approve</Text>
+                      <Text
+                        style={{
+                          fontFamily: fonts.sansSemibold,
+                          fontSize: 13,
+                          color: "#fff",
+                        }}
+                      >
+                        Approve
+                      </Text>
                     )}
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.rejectBtn}
+                  </Pressable>
+                  <Pressable
                     onPress={() => handleReject(item.id)}
+                    style={({ pressed }) => [
+                      {
+                        flex: 1,
+                        backgroundColor: colors.surfaceAlt,
+                        borderRadius: 100,
+                        paddingVertical: 12,
+                        alignItems: "center",
+                        transform: [{ scale: pressed ? 0.97 : 1 }],
+                      },
+                    ]}
                   >
-                    <Text style={styles.rejectBtnText}>Reject</Text>
-                  </TouchableOpacity>
+                    <Text
+                      style={{
+                        fontFamily: fonts.sansSemibold,
+                        fontSize: 13,
+                        color: colors.expense,
+                      }}
+                    >
+                      Reject
+                    </Text>
+                  </Pressable>
                 </View>
               </View>
             );
@@ -356,12 +379,16 @@ export function TransactionReviewScreen({ navigation }: { navigation: any }) {
         title="Select Category"
         options={
           activeEntry?.parsed_type === "credit"
-            ? INCOME_CATEGORIES.map((c) => ({ label: c.label, value: c.value }))
-            : EXPENSE_CATEGORIES.map((c) => ({ label: c.label, value: c.value }))
+            ? INCOME_CATEGORIES.map((c) => ({
+                label: c.label,
+                value: c.value,
+              }))
+            : EXPENSE_CATEGORIES.map((c) => ({
+                label: c.label,
+                value: c.value,
+              }))
         }
-        selectedValue={
-          activeEntryId ? categoryMap[activeEntryId] || "" : ""
-        }
+        selectedValue={activeEntryId ? categoryMap[activeEntryId] || "" : ""}
         onSelect={handleCategorySelect}
         onClose={() => setCategoryPickerVisible(false)}
       />
@@ -370,68 +397,9 @@ export function TransactionReviewScreen({ navigation }: { navigation: any }) {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: "#fff" },
   centered: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#fff",
-    padding: 32,
   },
-  statsBar: {
-    padding: 16,
-    paddingBottom: 8,
-  },
-  statsText: { fontSize: 14, color: "#6b7280", fontWeight: "500" },
-  listContent: { padding: 16, paddingTop: 0, paddingBottom: 32 },
-  card: {
-    backgroundColor: "#f9fafb",
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 12,
-  },
-  cardHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    marginBottom: 8,
-  },
-  typeBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
-  sourceBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
-  cardDate: { fontSize: 12, color: "#6b7280", flex: 1 },
-  cardAmount: { fontSize: 22, fontWeight: "700", marginBottom: 4 },
-  cardDesc: { fontSize: 13, color: "#4b5563", marginBottom: 10 },
-  categoryRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#e5e7eb",
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    marginBottom: 12,
-  },
-  categoryLabel: { fontSize: 13, color: "#6b7280", marginRight: 6 },
-  categoryValue: { fontSize: 13, fontWeight: "600", color: "#374151", flex: 1 },
-  changeText: { fontSize: 12, color: "#0d9488", fontWeight: "600" },
-  actionRow: { flexDirection: "row", gap: 10 },
-  approveBtn: {
-    flex: 1,
-    backgroundColor: "#0d9488",
-    borderRadius: 10,
-    paddingVertical: 12,
-    alignItems: "center",
-  },
-  approveBtnText: { color: "#fff", fontSize: 14, fontWeight: "600" },
-  rejectBtn: {
-    flex: 1,
-    backgroundColor: "#fee2e2",
-    borderRadius: 10,
-    paddingVertical: 12,
-    alignItems: "center",
-  },
-  rejectBtnText: { color: "#dc2626", fontSize: 14, fontWeight: "600" },
-  btnDisabled: { opacity: 0.5 },
-  emptyIcon: { fontSize: 48, marginBottom: 12 },
-  emptyTitle: { fontSize: 18, fontWeight: "700", color: "#1f2937", marginBottom: 8 },
-  emptyDesc: { fontSize: 14, color: "#6b7280" },
 });

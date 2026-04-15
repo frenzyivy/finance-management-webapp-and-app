@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { NavigationContainer } from "@react-navigation/native";
+import { NavigationContainer, DefaultTheme, DarkTheme } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { Session } from "@supabase/supabase-js";
 import { supabase } from "../lib/supabase";
@@ -9,6 +9,12 @@ import { AddGoalScreen } from "../screens/AddGoalScreen";
 import { AddDebtScreen } from "../screens/AddDebtScreen";
 import { AddIncomeScreen } from "../screens/AddIncomeScreen";
 import { AddExpenseScreen } from "../screens/AddExpenseScreen";
+import { ExpensesScreen } from "../screens/ExpensesScreen";
+import { GoalsScreen } from "../screens/GoalsScreen";
+import { DebtsScreen } from "../screens/DebtsScreen";
+import { BudgetScreen } from "../screens/BudgetScreen";
+import { BusinessDashboardScreen } from "../screens/BusinessDashboardScreen";
+import { SettingsScreen } from "../screens/SettingsScreen";
 import { ImportsScreen } from "../screens/ImportsScreen";
 import { SmsScanScreen } from "../screens/SmsScanScreen";
 import { TransactionReviewScreen } from "../screens/TransactionReviewScreen";
@@ -38,6 +44,12 @@ export type RootStackParamList = {
   AddExpense: { entry?: ExpenseEntry } | undefined;
   AddGoal: { goal?: SavingsGoal } | undefined;
   AddDebt: { debt?: Debt } | undefined;
+  Expenses: undefined;
+  Goals: undefined;
+  Debts: undefined;
+  Budget: undefined;
+  Business: undefined;
+  Settings: undefined;
   CreditCards: undefined;
   AddCreditCard: { card?: CreditCard } | undefined;
   YearReview: undefined;
@@ -59,6 +71,111 @@ export type RootStackParamList = {
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
+
+function InnerStack({ session }: { session: Session | null }) {
+  const { isDark, colors } = useTheme();
+
+  const navTheme = {
+    ...(isDark ? DarkTheme : DefaultTheme),
+    colors: {
+      ...(isDark ? DarkTheme : DefaultTheme).colors,
+      background: colors.bg,
+      card: colors.surface,
+      text: colors.textPrimary,
+      border: colors.border,
+      primary: colors.accent,
+    },
+  };
+
+  return (
+    <NavigationContainer theme={navTheme}>
+      {session ? (
+        <Stack.Navigator screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="Main" component={MainTabs} />
+          <Stack.Screen name="Expenses" component={ExpensesScreen} />
+          <Stack.Screen name="Goals" component={GoalsScreen} />
+          <Stack.Screen name="Debts" component={DebtsScreen} />
+          <Stack.Screen name="Budget" component={BudgetScreen} />
+          <Stack.Screen name="Business" component={BusinessDashboardScreen} />
+          <Stack.Screen name="Settings" component={SettingsScreen} />
+          <Stack.Screen name="CreditCards" component={CreditCardsScreen} />
+          <Stack.Screen name="YearReview" component={YearReviewScreen} />
+          <Stack.Screen name="Imports" component={ImportsScreen} />
+          <Stack.Screen name="SmsScan" component={SmsScanScreen} />
+          <Stack.Screen name="TransactionReview" component={TransactionReviewScreen} />
+          <Stack.Screen name="BusinessIncome" component={BusinessIncomeScreen} />
+          <Stack.Screen name="BusinessExpenses" component={BusinessExpensesScreen} />
+          <Stack.Screen name="BusinessSubscriptions" component={BusinessSubscriptionsScreen} />
+          <Stack.Screen name="BusinessClients" component={BusinessClientsScreen} />
+          <Stack.Screen name="Transfers" component={TransfersScreen} />
+
+          <Stack.Screen
+            name="AddGoal"
+            component={AddGoalScreen}
+            options={{ presentation: "modal" }}
+          />
+          <Stack.Screen
+            name="AddDebt"
+            component={AddDebtScreen}
+            options={{ presentation: "modal" }}
+          />
+          <Stack.Screen
+            name="AddIncome"
+            component={AddIncomeScreen}
+            options={{ presentation: "modal" }}
+          />
+          <Stack.Screen
+            name="AddExpense"
+            component={AddExpenseScreen}
+            options={{ presentation: "modal" }}
+          />
+          <Stack.Screen
+            name="AddCreditCard"
+            component={AddCreditCardScreen}
+            options={{ presentation: "modal" }}
+          />
+          <Stack.Screen
+            name="AddBusinessIncome"
+            component={AddBusinessIncomeScreen}
+            options={{ presentation: "modal" }}
+          />
+          <Stack.Screen
+            name="AddBusinessExpense"
+            component={AddBusinessExpenseScreen}
+            options={{ presentation: "modal" }}
+          />
+          <Stack.Screen
+            name="AddBusinessSubscription"
+            component={AddBusinessSubscriptionScreen}
+            options={{ presentation: "modal" }}
+          />
+          <Stack.Screen
+            name="AddBusinessClient"
+            component={AddBusinessClientScreen}
+            options={{ presentation: "modal" }}
+          />
+          <Stack.Screen
+            name="ScanBnplInvoice"
+            component={ScanBnplInvoiceScreen}
+            options={{ presentation: "modal" }}
+          />
+          <Stack.Screen
+            name="CCStatementUpload"
+            component={CCStatementUploadScreen}
+            options={{ presentation: "modal" }}
+          />
+          <Stack.Screen
+            name="AddTransfer"
+            component={AddTransferScreen}
+            options={{ presentation: "modal" }}
+          />
+        </Stack.Navigator>
+      ) : (
+        <AuthNavigator />
+      )}
+    </NavigationContainer>
+  );
+}
 
 export function AppNavigator() {
   const [session, setSession] = useState<Session | null>(null);
@@ -83,229 +200,7 @@ export function AppNavigator() {
 
   return (
     <ThemeProvider>
-    <NavigationContainer>
-      {session ? (
-        <Stack.Navigator>
-          <Stack.Screen
-            name="Main"
-            component={MainTabs}
-            options={{ headerShown: false }}
-          />
-          <Stack.Screen
-            name="AddGoal"
-            component={AddGoalScreen}
-            options={({ route }) => ({
-              presentation: "modal",
-              title: route.params?.goal ? "Edit Goal" : "New Goal",
-              headerStyle: { backgroundColor: "#0d9488" },
-              headerTintColor: "#fff",
-            })}
-          />
-          <Stack.Screen
-            name="AddDebt"
-            component={AddDebtScreen}
-            options={({ route }) => ({
-              presentation: "modal",
-              title: route.params?.debt ? "Edit Debt" : "Add Debt",
-              headerStyle: { backgroundColor: "#0d9488" },
-              headerTintColor: "#fff",
-            })}
-          />
-          <Stack.Screen
-            name="AddIncome"
-            component={AddIncomeScreen}
-            options={({ route }) => ({
-              presentation: "modal",
-              title: route.params?.entry ? "Edit Income" : "Add Income",
-              headerStyle: { backgroundColor: "#0d9488" },
-              headerTintColor: "#fff",
-            })}
-          />
-          <Stack.Screen
-            name="AddExpense"
-            component={AddExpenseScreen}
-            options={({ route }) => ({
-              presentation: "modal",
-              title: route.params?.entry ? "Edit Expense" : "Add Expense",
-              headerStyle: { backgroundColor: "#0d9488" },
-              headerTintColor: "#fff",
-            })}
-          />
-          <Stack.Screen
-            name="CreditCards"
-            component={CreditCardsScreen}
-            options={{
-              title: "Credit Cards",
-              headerStyle: { backgroundColor: "#0d9488" },
-              headerTintColor: "#fff",
-            }}
-          />
-          <Stack.Screen
-            name="AddCreditCard"
-            component={AddCreditCardScreen}
-            options={({ route }) => ({
-              presentation: "modal",
-              title: route.params?.card ? "Edit Card" : "Add Card",
-              headerStyle: { backgroundColor: "#0d9488" },
-              headerTintColor: "#fff",
-            })}
-          />
-          <Stack.Screen
-            name="YearReview"
-            component={YearReviewScreen}
-            options={{
-              title: "Year in Review",
-              headerStyle: { backgroundColor: "#0d9488" },
-              headerTintColor: "#fff",
-            }}
-          />
-          <Stack.Screen
-            name="Imports"
-            component={ImportsScreen}
-            options={{
-              title: "Import Transactions",
-              headerStyle: { backgroundColor: "#0d9488" },
-              headerTintColor: "#fff",
-            }}
-          />
-          <Stack.Screen
-            name="SmsScan"
-            component={SmsScanScreen}
-            options={{
-              title: "Scan SMS",
-              headerStyle: { backgroundColor: "#0d9488" },
-              headerTintColor: "#fff",
-            }}
-          />
-          <Stack.Screen
-            name="TransactionReview"
-            component={TransactionReviewScreen}
-            options={{
-              title: "Review Imports",
-              headerStyle: { backgroundColor: "#0d9488" },
-              headerTintColor: "#fff",
-            }}
-          />
-          <Stack.Screen
-            name="BusinessIncome"
-            component={BusinessIncomeScreen}
-            options={{
-              title: "Business Income",
-              headerStyle: { backgroundColor: "#185FA5" },
-              headerTintColor: "#fff",
-            }}
-          />
-          <Stack.Screen
-            name="AddBusinessIncome"
-            component={AddBusinessIncomeScreen}
-            options={({ route }) => ({
-              presentation: "modal",
-              title: route.params?.entry ? "Edit Income" : "Add Business Income",
-              headerStyle: { backgroundColor: "#185FA5" },
-              headerTintColor: "#fff",
-            })}
-          />
-          <Stack.Screen
-            name="BusinessExpenses"
-            component={BusinessExpensesScreen}
-            options={{
-              title: "Business Expenses",
-              headerStyle: { backgroundColor: "#185FA5" },
-              headerTintColor: "#fff",
-            }}
-          />
-          <Stack.Screen
-            name="AddBusinessExpense"
-            component={AddBusinessExpenseScreen}
-            options={({ route }) => ({
-              presentation: "modal",
-              title: route.params?.entry ? "Edit Expense" : "Add Business Expense",
-              headerStyle: { backgroundColor: "#185FA5" },
-              headerTintColor: "#fff",
-            })}
-          />
-          <Stack.Screen
-            name="BusinessSubscriptions"
-            component={BusinessSubscriptionsScreen}
-            options={{
-              title: "Subscriptions",
-              headerStyle: { backgroundColor: "#185FA5" },
-              headerTintColor: "#fff",
-            }}
-          />
-          <Stack.Screen
-            name="AddBusinessSubscription"
-            component={AddBusinessSubscriptionScreen}
-            options={({ route }) => ({
-              presentation: "modal",
-              title: route.params?.entry ? "Edit Subscription" : "Add Subscription",
-              headerStyle: { backgroundColor: "#185FA5" },
-              headerTintColor: "#fff",
-            })}
-          />
-          <Stack.Screen
-            name="BusinessClients"
-            component={BusinessClientsScreen}
-            options={{
-              title: "Clients",
-              headerStyle: { backgroundColor: "#185FA5" },
-              headerTintColor: "#fff",
-            }}
-          />
-          <Stack.Screen
-            name="AddBusinessClient"
-            component={AddBusinessClientScreen}
-            options={({ route }) => ({
-              presentation: "modal",
-              title: route.params?.entry ? "Edit Client" : "Add Client",
-              headerStyle: { backgroundColor: "#185FA5" },
-              headerTintColor: "#fff",
-            })}
-          />
-          <Stack.Screen
-            name="ScanBnplInvoice"
-            component={ScanBnplInvoiceScreen}
-            options={{
-              presentation: "modal",
-              title: "Scan BNPL Invoice",
-              headerStyle: { backgroundColor: "#111827" },
-              headerTintColor: "#fff",
-            }}
-          />
-          <Stack.Screen
-            name="CCStatementUpload"
-            component={CCStatementUploadScreen}
-            options={{
-              presentation: "modal",
-              title: "Upload CC Statement",
-              headerStyle: { backgroundColor: "#004B87" },
-              headerTintColor: "#fff",
-            }}
-          />
-          <Stack.Screen
-            name="Transfers"
-            component={TransfersScreen}
-            options={{
-              title: "Transfers",
-              headerStyle: { backgroundColor: "#185FA5" },
-              headerTintColor: "#fff",
-            }}
-          />
-          <Stack.Screen
-            name="AddTransfer"
-            component={AddTransferScreen}
-            options={{
-              presentation: "modal",
-              title: "Log Transfer",
-              headerStyle: { backgroundColor: "#185FA5" },
-              headerTintColor: "#fff",
-            }}
-          />
-        </Stack.Navigator>
-      ) : (
-        <AuthNavigator />
-      )}
-    </NavigationContainer>
+      <InnerStack session={session} />
     </ThemeProvider>
   );
 }

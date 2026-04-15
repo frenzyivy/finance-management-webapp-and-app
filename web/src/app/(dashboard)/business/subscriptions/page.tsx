@@ -13,6 +13,7 @@ import type { BusinessSubscription, BusinessSubscriptionWithSpend } from "@/type
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { PageHeader } from "@/components/layout/PageHeader";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
@@ -67,11 +68,19 @@ export default function BusinessSubscriptionsPage() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold tracking-tight">Subscriptions</h2>
-        <Button onClick={openAddDialog}><Plus className="size-4" /> Add Subscription</Button>
+    <div className="flex flex-col">
+      <div className="animate d1">
+        <PageHeader
+          title="Subscriptions"
+          eyebrow="Recurring business expenses"
+          actions={
+            <Button onClick={openAddDialog}>
+              <Plus className="size-4" /> Add
+            </Button>
+          }
+        />
       </div>
+      <div className="px-6 space-y-6">
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <Card>
@@ -246,6 +255,7 @@ export default function BusinessSubscriptionsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      </div>
     </div>
   );
 }

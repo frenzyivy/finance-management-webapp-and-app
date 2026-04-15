@@ -6,16 +6,27 @@ import {
   ScrollView,
   RefreshControl,
   ActivityIndicator,
-  TouchableOpacity,
+  Pressable,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import Svg, { Path } from "react-native-svg";
+import { format } from "date-fns";
 import { supabase } from "../lib/supabase";
 import { useSyncStore } from "../lib/sync-store";
-import { formatCurrency, formatDate } from "../lib/format";
 import {
   BUSINESS_INCOME_CATEGORIES,
   BUSINESS_EXPENSE_CATEGORIES,
 } from "../lib/business-constants";
+import { useTheme } from "../lib/theme-context";
+import { text as typography } from "../lib/typography";
+import { radii, navHeight } from "../lib/radii";
+import { PageHeader } from "../components/PageHeader";
+import {
+  TransactionCard,
+  SectionHeader,
+  formatINR,
+} from "../components/komal";
 import type {
   BusinessIncome,
   BusinessExpense,
@@ -44,6 +55,8 @@ function getCategoryLabel(
 
 export function BusinessDashboardScreen() {
   const navigation = useNavigation<any>();
+  const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
   const syncVersion = useSyncStore((s) => s.syncVersion);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -137,8 +150,8 @@ export function BusinessDashboardScreen() {
 
   if (loading) {
     return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#185FA5" />
+      <View style={[styles.centered, { backgroundColor: colors.bg }]}>
+        <ActivityIndicator size="large" color={colors.accent} />
       </View>
     );
   }
@@ -146,317 +159,360 @@ export function BusinessDashboardScreen() {
   const netProfit = totalRevenue - totalExpenses;
 
   return (
-    <ScrollView
-      style={styles.screen}
-      contentContainerStyle={styles.content}
-      refreshControl={
-        <RefreshControl
-          refreshing={refreshing}
-          onRefresh={onRefresh}
-          tintColor="#185FA5"
+    <View style={{ flex: 1, backgroundColor: colors.bg }}>
+      <ScrollView
+        contentContainerStyle={{
+          paddingBottom: navHeight + 40 + insets.bottom,
+        }}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={colors.accent}
+          />
+        }
+      >
+        <PageHeader
+          title="Allianza Biz"
+          eyebrow="Business finance overview"
+          actions={
+            <Pressable
+              onPress={() => navigation.navigate("AddBusinessIncome")}
+              style={({ pressed }) => [
+                styles.iconBtn,
+                {
+                  backgroundColor: colors.surface,
+                  borderColor: colors.border,
+                  transform: [{ scale: pressed ? 0.97 : 1 }],
+                },
+              ]}
+            >
+              <Svg
+                width={18}
+                height={18}
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke={colors.textPrimary}
+                strokeWidth={1.8}
+                strokeLinecap="round"
+              >
+                <Path d="M12 5v14M5 12h14" />
+              </Svg>
+            </Pressable>
+          }
         />
-      }
-    >
-      {/* Summary Cards */}
-      <View style={styles.cardGrid}>
-        <View style={[styles.card, { borderLeftColor: "#22c55e" }]}>
-          <Text style={styles.cardTitle}>Revenue</Text>
-          <Text style={[styles.cardAmount, { color: "#22c55e" }]}>
-            {formatCurrency(totalRevenue)}
-          </Text>
-        </View>
-        <View style={[styles.card, { borderLeftColor: "#f87171" }]}>
-          <Text style={styles.cardTitle}>Expenses</Text>
-          <Text style={[styles.cardAmount, { color: "#f87171" }]}>
-            {formatCurrency(totalExpenses)}
-          </Text>
-        </View>
-        <View
-          style={[
-            styles.card,
-            { borderLeftColor: netProfit >= 0 ? "#10b981" : "#ef4444" },
-          ]}
-        >
-          <Text style={styles.cardTitle}>Net Profit</Text>
-          <Text
+
+        {/* Summary Cards */}
+        <View style={styles.cardGrid}>
+          <View
             style={[
-              styles.cardAmount,
-              { color: netProfit >= 0 ? "#10b981" : "#ef4444" },
+              styles.card,
+              { backgroundColor: colors.surface, borderColor: colors.border },
             ]}
           >
-            {formatCurrency(netProfit)}
-          </Text>
-        </View>
-        <View style={[styles.card, { borderLeftColor: "#f59e0b" }]}>
-          <Text style={styles.cardTitle}>Subscription Burn</Text>
-          <Text style={[styles.cardAmount, { color: "#f59e0b" }]}>
-            {formatCurrency(subscriptionBurn)}/mo
-          </Text>
-        </View>
-      </View>
-
-      {/* Quick Actions */}
-      <Text style={styles.sectionTitle}>Quick Actions</Text>
-      <View style={styles.quickActions}>
-        <TouchableOpacity
-          style={styles.quickAction}
-          onPress={() => navigation.navigate("AddBusinessIncome")}
-          activeOpacity={0.7}
-        >
-          <Text style={styles.quickActionIcon}>+</Text>
-          <Text style={styles.quickActionLabel}>Add Income</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.quickAction}
-          onPress={() => navigation.navigate("AddBusinessExpense")}
-          activeOpacity={0.7}
-        >
-          <Text style={styles.quickActionIcon}>+</Text>
-          <Text style={styles.quickActionLabel}>Add Expense</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.quickAction}
-          onPress={() => navigation.navigate("BusinessSubscriptions")}
-          activeOpacity={0.7}
-        >
-          <Text style={styles.quickActionIcon}>S</Text>
-          <Text style={styles.quickActionLabel}>Subscriptions</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.quickAction}
-          onPress={() => navigation.navigate("BusinessClients")}
-          activeOpacity={0.7}
-        >
-          <Text style={styles.quickActionIcon}>C</Text>
-          <Text style={styles.quickActionLabel}>Clients</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.quickAction}
-          onPress={() => navigation.navigate("Transfers")}
-          activeOpacity={0.7}
-        >
-          <Text style={styles.quickActionIcon}>⇄</Text>
-          <Text style={styles.quickActionLabel}>Transfers</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Recent Transactions */}
-      <Text style={styles.sectionTitle}>Recent Business Transactions</Text>
-      {transactions.length === 0 ? (
-        <View style={styles.emptyState}>
-          <Text style={styles.emptyText}>
-            No business transactions this month yet.
-          </Text>
-        </View>
-      ) : (
-        transactions.map((txn) => (
-          <View key={txn.id} style={styles.txnRow}>
-            <View
-              style={[
-                styles.txnIndicator,
-                {
-                  backgroundColor:
-                    txn.type === "income" ? "#dcfce7" : "#fee2e2",
-                },
-              ]}
-            >
-              <Text style={styles.txnIndicatorText}>
-                {txn.type === "income" ? "+" : "-"}
-              </Text>
-            </View>
-            <View style={styles.txnDetails}>
-              <Text style={styles.txnDescription} numberOfLines={1}>
-                {txn.description}
-              </Text>
-              <View style={styles.txnMeta}>
-                <View
-                  style={[
-                    styles.badge,
-                    {
-                      backgroundColor:
-                        txn.type === "income" ? "#dcfce7" : "#fee2e2",
-                    },
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.badgeText,
-                      {
-                        color:
-                          txn.type === "income" ? "#16a34a" : "#dc2626",
-                      },
-                    ]}
-                  >
-                    {getCategoryLabel(txn.category, txn.type)}
-                  </Text>
-                </View>
-                <Text style={styles.txnDate}>{formatDate(txn.date)}</Text>
-              </View>
-            </View>
             <Text
               style={[
-                styles.txnAmount,
+                typography.caption,
+                { color: colors.textSecondary, marginBottom: 4 },
+              ]}
+            >
+              Revenue
+            </Text>
+            <Text
+              style={[
+                styles.cardAmount,
+                { color: colors.income },
+              ]}
+            >
+              {formatINR(totalRevenue)}
+            </Text>
+          </View>
+          <View
+            style={[
+              styles.card,
+              { backgroundColor: colors.surface, borderColor: colors.border },
+            ]}
+          >
+            <Text
+              style={[
+                typography.caption,
+                { color: colors.textSecondary, marginBottom: 4 },
+              ]}
+            >
+              Expenses
+            </Text>
+            <Text
+              style={[
+                styles.cardAmount,
+                { color: colors.expense },
+              ]}
+            >
+              {formatINR(totalExpenses)}
+            </Text>
+          </View>
+          <View
+            style={[
+              styles.card,
+              { backgroundColor: colors.surface, borderColor: colors.border },
+            ]}
+          >
+            <Text
+              style={[
+                typography.caption,
+                { color: colors.textSecondary, marginBottom: 4 },
+              ]}
+            >
+              Net Profit
+            </Text>
+            <Text
+              style={[
+                styles.cardAmount,
                 {
-                  color: txn.type === "income" ? "#22c55e" : "#f87171",
+                  color: netProfit >= 0 ? colors.income : colors.expense,
                 },
               ]}
             >
-              {txn.type === "income" ? "+" : "-"}
-              {formatCurrency(txn.amount)}
+              {formatINR(netProfit)}
             </Text>
           </View>
-        ))
-      )}
-    </ScrollView>
+          <View
+            style={[
+              styles.card,
+              { backgroundColor: colors.surface, borderColor: colors.border },
+            ]}
+          >
+            <Text
+              style={[
+                typography.caption,
+                { color: colors.textSecondary, marginBottom: 4 },
+              ]}
+            >
+              Subscription Burn
+            </Text>
+            <Text
+              style={[
+                styles.cardAmount,
+                { color: colors.warning },
+              ]}
+            >
+              {formatINR(subscriptionBurn)}/mo
+            </Text>
+          </View>
+        </View>
+
+        {/* Quick Actions */}
+        <SectionHeader title="Quick Actions" />
+        <View style={styles.quickActions}>
+          <Pressable
+            onPress={() => navigation.navigate("AddBusinessIncome")}
+            style={({ pressed }) => [
+              styles.quickAction,
+              {
+                backgroundColor: colors.surface,
+                borderColor: colors.border,
+                transform: [{ scale: pressed ? 0.97 : 1 }],
+              },
+            ]}
+          >
+            <Text
+              style={[styles.quickActionIcon, { color: colors.accent }]}
+            >
+              +
+            </Text>
+            <Text
+              style={[
+                typography.caption,
+                { color: colors.textPrimary, fontWeight: "600" },
+              ]}
+            >
+              Add Income
+            </Text>
+          </Pressable>
+          <Pressable
+            onPress={() => navigation.navigate("AddBusinessExpense")}
+            style={({ pressed }) => [
+              styles.quickAction,
+              {
+                backgroundColor: colors.surface,
+                borderColor: colors.border,
+                transform: [{ scale: pressed ? 0.97 : 1 }],
+              },
+            ]}
+          >
+            <Text
+              style={[styles.quickActionIcon, { color: colors.accent }]}
+            >
+              +
+            </Text>
+            <Text
+              style={[
+                typography.caption,
+                { color: colors.textPrimary, fontWeight: "600" },
+              ]}
+            >
+              Add Expense
+            </Text>
+          </Pressable>
+          <Pressable
+            onPress={() => navigation.navigate("BusinessSubscriptions")}
+            style={({ pressed }) => [
+              styles.quickAction,
+              {
+                backgroundColor: colors.surface,
+                borderColor: colors.border,
+                transform: [{ scale: pressed ? 0.97 : 1 }],
+              },
+            ]}
+          >
+            <Text
+              style={[styles.quickActionIcon, { color: colors.accent }]}
+            >
+              S
+            </Text>
+            <Text
+              style={[
+                typography.caption,
+                { color: colors.textPrimary, fontWeight: "600" },
+              ]}
+            >
+              Subscriptions
+            </Text>
+          </Pressable>
+          <Pressable
+            onPress={() => navigation.navigate("BusinessClients")}
+            style={({ pressed }) => [
+              styles.quickAction,
+              {
+                backgroundColor: colors.surface,
+                borderColor: colors.border,
+                transform: [{ scale: pressed ? 0.97 : 1 }],
+              },
+            ]}
+          >
+            <Text
+              style={[styles.quickActionIcon, { color: colors.accent }]}
+            >
+              C
+            </Text>
+            <Text
+              style={[
+                typography.caption,
+                { color: colors.textPrimary, fontWeight: "600" },
+              ]}
+            >
+              Clients
+            </Text>
+          </Pressable>
+          <Pressable
+            onPress={() => navigation.navigate("Transfers")}
+            style={({ pressed }) => [
+              styles.quickAction,
+              {
+                backgroundColor: colors.surface,
+                borderColor: colors.border,
+                transform: [{ scale: pressed ? 0.97 : 1 }],
+              },
+            ]}
+          >
+            <Text
+              style={[styles.quickActionIcon, { color: colors.accent }]}
+            >
+              ⇄
+            </Text>
+            <Text
+              style={[
+                typography.caption,
+                { color: colors.textPrimary, fontWeight: "600" },
+              ]}
+            >
+              Transfers
+            </Text>
+          </Pressable>
+        </View>
+
+        {/* Recent Transactions */}
+        <SectionHeader title="Recent Business Transactions" />
+        {transactions.length === 0 ? (
+          <Text
+            style={{
+              color: colors.textSecondary,
+              textAlign: "center",
+              marginHorizontal: 24,
+              marginVertical: 24,
+              fontFamily: typography.caption.fontFamily,
+              fontSize: 13,
+            }}
+          >
+            No business transactions this month yet.
+          </Text>
+        ) : (
+          transactions.map((txn) => (
+            <TransactionCard
+              key={`${txn.type}-${txn.id}`}
+              name={txn.description}
+              kind={txn.type}
+              category={txn.category}
+              categoryLabel={getCategoryLabel(txn.category, txn.type)}
+              date={format(new Date(txn.date), "d MMM")}
+              amount={txn.amount}
+            />
+          ))
+        )}
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: "#f8fafc",
-  },
-  content: {
-    padding: 16,
-    paddingBottom: 32,
-  },
   centered: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#f8fafc",
+  },
+  iconBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 100,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
   },
   cardGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
     justifyContent: "space-between",
     gap: 12,
-    marginBottom: 24,
+    marginHorizontal: 24,
+    marginBottom: 20,
   },
   card: {
     width: "48%",
-    backgroundColor: "#fff",
-    borderRadius: 12,
+    borderRadius: radii.sm,
+    borderWidth: 1,
     padding: 16,
-    borderLeftWidth: 4,
-    elevation: 2,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-  },
-  cardTitle: {
-    fontSize: 12,
-    color: "#6b7280",
-    marginBottom: 4,
-    fontWeight: "500",
   },
   cardAmount: {
     fontSize: 18,
     fontWeight: "700",
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#1f2937",
-    marginBottom: 12,
   },
   quickActions: {
     flexDirection: "row",
     flexWrap: "wrap",
     justifyContent: "space-between",
     gap: 10,
-    marginBottom: 24,
+    marginHorizontal: 24,
+    marginBottom: 12,
   },
   quickAction: {
     width: "48%",
-    backgroundColor: "#fff",
-    borderRadius: 12,
+    borderRadius: radii.sm,
     padding: 14,
     alignItems: "center",
-    elevation: 2,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
   },
   quickActionIcon: {
     fontSize: 20,
     fontWeight: "700",
-    color: "#185FA5",
     marginBottom: 4,
-  },
-  quickActionLabel: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: "#1f2937",
-  },
-  emptyState: {
-    alignItems: "center",
-    paddingVertical: 32,
-  },
-  emptyText: {
-    fontSize: 14,
-    color: "#6b7280",
-  },
-  txnRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#fff",
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 8,
-    elevation: 2,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-  },
-  txnIndicator: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    justifyContent: "center",
-    alignItems: "center",
-    marginRight: 12,
-  },
-  txnIndicatorText: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: "#1f2937",
-  },
-  txnDetails: {
-    flex: 1,
-    marginRight: 8,
-  },
-  txnDescription: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#1f2937",
-    marginBottom: 4,
-  },
-  txnMeta: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  badge: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 10,
-  },
-  badgeText: {
-    fontSize: 11,
-    fontWeight: "600",
-  },
-  txnDate: {
-    fontSize: 12,
-    color: "#6b7280",
-  },
-  txnAmount: {
-    fontSize: 14,
-    fontWeight: "700",
   },
 });

@@ -5,15 +5,22 @@ import {
   StyleSheet,
   ScrollView,
   TextInput,
-  TouchableOpacity,
+  Pressable,
   Alert,
   ActivityIndicator,
 } from "react-native";
-import { useRoute, RouteProp } from "@react-navigation/native";
+import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import Svg, { Path } from "react-native-svg";
 import { supabase } from "../lib/supabase";
 import { DebtType, PriorityLevel } from "../types/database";
 import { PickerModal } from "../components/PickerModal";
+import { PageHeader } from "../components/PageHeader";
 import { DEBT_TYPES } from "../lib/constants";
+import { useTheme } from "../lib/theme-context";
+import { text as typography, fonts } from "../lib/typography";
+import { radii } from "../lib/radii";
+import { formatINR } from "../components/komal";
 import type { RootStackParamList } from "../navigation/AppNavigator";
 
 const PRIORITY_OPTIONS = [
@@ -22,8 +29,11 @@ const PRIORITY_OPTIONS = [
   { value: "low", label: "Low" },
 ];
 
-export function AddDebtScreen({ navigation }: any) {
+export function AddDebtScreen() {
+  const navigation = useNavigation<any>();
   const route = useRoute<RouteProp<RootStackParamList, "AddDebt">>();
+  const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
   const existingDebt = route.params?.debt;
   const isEditing = !!existingDebt;
 
@@ -95,165 +105,219 @@ export function AddDebtScreen({ navigation }: any) {
     }
   };
 
+  const inputStyle = {
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 14,
+    color: colors.textPrimary,
+    fontFamily: fonts.sansMedium,
+    fontSize: 14,
+  } as const;
+
+  const labelStyle = [typography.pillLabel, { color: colors.textTertiary, marginBottom: 6, marginTop: 16 }];
+
+  const outstanding = parseFloat(currentBalance);
+
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Text style={styles.label}>Debt Name *</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="e.g. HDFC Credit Card"
-        value={name}
-        onChangeText={setName}
+    <View style={{ flex: 1, backgroundColor: colors.bg }}>
+      <PageHeader
+        title={isEditing ? "Edit Debt" : "Add Debt"}
+        actions={
+          <Pressable
+            onPress={() => navigation.goBack()}
+            style={({ pressed }) => [
+              styles.iconBtn,
+              {
+                backgroundColor: colors.surface,
+                borderColor: colors.border,
+                transform: [{ scale: pressed ? 0.94 : 1 }],
+              },
+            ]}
+          >
+            <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={colors.textPrimary} strokeWidth={1.8} strokeLinecap="round">
+              <Path d="M18 6L6 18M6 6l12 12" />
+            </Svg>
+          </Pressable>
+        }
       />
-
-      <Text style={styles.label}>Type</Text>
-      <TouchableOpacity
-        style={styles.pickerBtn}
-        onPress={() => setTypePickerVisible(true)}
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={{ paddingBottom: 40 + insets.bottom, paddingHorizontal: 24 }}
+        keyboardShouldPersistTaps="handled"
       >
-        <Text style={styles.pickerBtnText}>
-          {DEBT_TYPES.find((d) => d.value === type)?.label || "Select"}
-        </Text>
-      </TouchableOpacity>
+        <Text style={labelStyle}>Debt Name *</Text>
+        <TextInput
+          style={inputStyle}
+          placeholder="e.g. HDFC Credit Card"
+          placeholderTextColor={colors.textTertiary}
+          value={name}
+          onChangeText={setName}
+        />
 
-      <PickerModal
-        visible={typePickerVisible}
-        onClose={() => setTypePickerVisible(false)}
-        options={DEBT_TYPES}
-        selectedValue={type}
-        onSelect={(val) => {
-          setType(val as DebtType);
-          setTypePickerVisible(false);
-        }}
-      />
+        <Text style={labelStyle}>Type</Text>
+        <Pressable
+          onPress={() => setTypePickerVisible(true)}
+          style={({ pressed }) => [
+            inputStyle,
+            { flexDirection: "row", justifyContent: "space-between", alignItems: "center", transform: [{ scale: pressed ? 0.97 : 1 }] },
+          ]}
+        >
+          <Text style={{ color: colors.textPrimary, fontFamily: fonts.sansMedium, fontSize: 14 }}>
+            {DEBT_TYPES.find((d) => d.value === type)?.label || "Select"}
+          </Text>
+          <Text style={{ fontSize: 12, color: colors.textSecondary }}>▼</Text>
+        </Pressable>
 
-      <Text style={styles.label}>Creditor / Lender Name</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="e.g. HDFC Bank"
-        value={lender}
-        onChangeText={setLender}
-      />
+        <PickerModal
+          visible={typePickerVisible}
+          onClose={() => setTypePickerVisible(false)}
+          options={DEBT_TYPES}
+          selectedValue={type}
+          onSelect={(val) => {
+            setType(val as DebtType);
+            setTypePickerVisible(false);
+          }}
+        />
 
-      <Text style={styles.label}>Original Amount *</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="e.g. 50000"
-        keyboardType="numeric"
-        value={principalAmount}
-        onChangeText={setPrincipalAmount}
-      />
+        <Text style={labelStyle}>Creditor / Lender Name</Text>
+        <TextInput
+          style={inputStyle}
+          placeholder="e.g. HDFC Bank"
+          placeholderTextColor={colors.textTertiary}
+          value={lender}
+          onChangeText={setLender}
+        />
 
-      <Text style={styles.label}>Outstanding Balance *</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="e.g. 35000"
-        keyboardType="numeric"
-        value={currentBalance}
-        onChangeText={setCurrentBalance}
-      />
+        <Text style={labelStyle}>Original Amount *</Text>
+        <TextInput
+          style={inputStyle}
+          placeholder="e.g. 50000"
+          placeholderTextColor={colors.textTertiary}
+          keyboardType="numeric"
+          value={principalAmount}
+          onChangeText={setPrincipalAmount}
+        />
 
-      <Text style={styles.label}>Interest Rate % (optional)</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="e.g. 18"
-        keyboardType="numeric"
-        value={interestRate}
-        onChangeText={setInterestRate}
-      />
-
-      <Text style={styles.label}>EMI / Minimum Payment (optional)</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="e.g. 2000"
-        keyboardType="numeric"
-        value={minimumPayment}
-        onChangeText={setMinimumPayment}
-      />
-
-      <Text style={styles.label}>Due Date (optional)</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="YYYY-MM-DD"
-        value={dueDate}
-        onChangeText={setDueDate}
-      />
-
-      <Text style={styles.label}>Priority</Text>
-      <TouchableOpacity
-        style={styles.pickerBtn}
-        onPress={() => setPriorityPickerVisible(true)}
-      >
-        <Text style={styles.pickerBtnText}>
-          {PRIORITY_OPTIONS.find((p) => p.value === priority)?.label || "Select"}
-        </Text>
-      </TouchableOpacity>
-
-      <PickerModal
-        visible={priorityPickerVisible}
-        onClose={() => setPriorityPickerVisible(false)}
-        options={PRIORITY_OPTIONS}
-        selectedValue={priority}
-        onSelect={(val) => {
-          setPriority(val as PriorityLevel);
-          setPriorityPickerVisible(false);
-        }}
-      />
-
-      <Text style={styles.label}>Notes (optional)</Text>
-      <TextInput
-        style={[styles.input, { height: 80, textAlignVertical: "top" }]}
-        placeholder="Any additional details..."
-        multiline
-        value={notes}
-        onChangeText={setNotes}
-      />
-
-      <TouchableOpacity
-        style={[styles.saveBtn, saving && { opacity: 0.6 }]}
-        onPress={handleSave}
-        disabled={saving}
-      >
-        {saving ? (
-          <ActivityIndicator color="#fff" />
-        ) : (
-          <Text style={styles.saveBtnText}>{isEditing ? "Update Debt" : "Save Debt"}</Text>
+        <Text style={labelStyle}>Outstanding Balance *</Text>
+        <TextInput
+          style={inputStyle}
+          placeholder="e.g. 35000"
+          placeholderTextColor={colors.textTertiary}
+          keyboardType="numeric"
+          value={currentBalance}
+          onChangeText={setCurrentBalance}
+        />
+        {!isNaN(outstanding) && outstanding > 0 && (
+          <Text style={[typography.caption, { color: colors.textSecondary, marginTop: 6 }]}>
+            {formatINR(outstanding)}
+          </Text>
         )}
-      </TouchableOpacity>
-    </ScrollView>
+
+        <Text style={labelStyle}>Interest Rate % (optional)</Text>
+        <TextInput
+          style={inputStyle}
+          placeholder="e.g. 18"
+          placeholderTextColor={colors.textTertiary}
+          keyboardType="numeric"
+          value={interestRate}
+          onChangeText={setInterestRate}
+        />
+
+        <Text style={labelStyle}>EMI / Minimum Payment (optional)</Text>
+        <TextInput
+          style={inputStyle}
+          placeholder="e.g. 2000"
+          placeholderTextColor={colors.textTertiary}
+          keyboardType="numeric"
+          value={minimumPayment}
+          onChangeText={setMinimumPayment}
+        />
+
+        <Text style={labelStyle}>Due Date (optional)</Text>
+        <TextInput
+          style={inputStyle}
+          placeholder="YYYY-MM-DD"
+          placeholderTextColor={colors.textTertiary}
+          value={dueDate}
+          onChangeText={setDueDate}
+        />
+
+        <Text style={labelStyle}>Priority</Text>
+        <Pressable
+          onPress={() => setPriorityPickerVisible(true)}
+          style={({ pressed }) => [
+            inputStyle,
+            { flexDirection: "row", justifyContent: "space-between", alignItems: "center", transform: [{ scale: pressed ? 0.97 : 1 }] },
+          ]}
+        >
+          <Text style={{ color: colors.textPrimary, fontFamily: fonts.sansMedium, fontSize: 14 }}>
+            {PRIORITY_OPTIONS.find((p) => p.value === priority)?.label || "Select"}
+          </Text>
+          <Text style={{ fontSize: 12, color: colors.textSecondary }}>▼</Text>
+        </Pressable>
+
+        <PickerModal
+          visible={priorityPickerVisible}
+          onClose={() => setPriorityPickerVisible(false)}
+          options={PRIORITY_OPTIONS}
+          selectedValue={priority}
+          onSelect={(val) => {
+            setPriority(val as PriorityLevel);
+            setPriorityPickerVisible(false);
+          }}
+        />
+
+        <Text style={labelStyle}>Notes (optional)</Text>
+        <TextInput
+          style={[inputStyle, { height: 80, textAlignVertical: "top" }]}
+          placeholder="Any additional details..."
+          placeholderTextColor={colors.textTertiary}
+          multiline
+          value={notes}
+          onChangeText={setNotes}
+        />
+
+        <Pressable
+          onPress={handleSave}
+          disabled={saving}
+          style={({ pressed }) => [
+            styles.saveBtn,
+            {
+              backgroundColor: colors.accent,
+              opacity: saving ? 0.6 : 1,
+              transform: [{ scale: pressed ? 0.97 : 1 }],
+            },
+          ]}
+        >
+          {saving ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text style={[styles.saveBtnText, { fontFamily: fonts.sansSemibold }]}>
+              {isEditing ? "Update Debt" : "Save Debt"}
+            </Text>
+          )}
+        </Pressable>
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#fff" },
-  content: { padding: 20, paddingBottom: 40 },
-  label: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#1f2937",
-    marginBottom: 6,
-    marginTop: 16,
-  },
-  input: {
+  iconBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: radii.full,
     borderWidth: 1,
-    borderColor: "#d1d5db",
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 16,
-    color: "#1f2937",
+    alignItems: "center",
+    justifyContent: "center",
   },
-  pickerBtn: {
-    borderWidth: 1,
-    borderColor: "#d1d5db",
-    borderRadius: 8,
-    padding: 12,
-  },
-  pickerBtnText: { fontSize: 16, color: "#1f2937" },
   saveBtn: {
-    backgroundColor: "#0d9488",
-    padding: 16,
+    paddingVertical: 14,
     borderRadius: 12,
     alignItems: "center",
     marginTop: 32,
   },
-  saveBtnText: { color: "#fff", fontSize: 16, fontWeight: "bold" },
+  saveBtnText: { color: "#fff", fontSize: 15, fontWeight: "600" },
 });

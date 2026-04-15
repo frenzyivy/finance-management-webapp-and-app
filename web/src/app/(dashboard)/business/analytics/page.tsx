@@ -18,6 +18,7 @@ import { formatCurrency } from "@/lib/utils/currency";
 import { SUBSCRIPTION_CATEGORIES } from "@/lib/constants/business-categories";
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { PageHeader } from "@/components/layout/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
@@ -64,20 +65,14 @@ export default function BusinessAnalyticsPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between flex-wrap gap-2">
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-100 dark:bg-blue-950">
-            <BarChart3 className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-          </div>
-          <div>
-            <h2 className="text-2xl font-bold tracking-tight">Business Analytics</h2>
-            <p className="text-sm text-muted-foreground">
-              Profit trends, client profitability, and subscription insights (last 6 months)
-            </p>
-          </div>
-        </div>
+    <div className="flex flex-col">
+      <div className="animate d1">
+        <PageHeader
+          title="Business Analytics"
+          eyebrow="Last 6 months"
+        />
       </div>
+      <div className="px-6 space-y-6">
 
       {/* 6-month summary cards */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -311,6 +306,7 @@ export default function BusinessAnalyticsPage() {
         </TabsContent>
       </Tabs>
 
+      </div>
     </div>
   );
 }

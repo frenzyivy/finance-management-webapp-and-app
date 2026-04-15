@@ -5,7 +5,7 @@ import {
   StyleSheet,
   ScrollView,
   TextInput,
-  TouchableOpacity,
+  Pressable,
   Switch,
   Alert,
   ActivityIndicator,
@@ -13,8 +13,11 @@ import {
   Platform,
 } from "react-native";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import Svg, { Path } from "react-native-svg";
 import { supabase } from "../lib/supabase";
 import { PickerModal } from "../components/PickerModal";
+import { PageHeader } from "../components/PageHeader";
 import {
   EXPENSE_CATEGORIES,
   PAYMENT_METHODS,
@@ -23,6 +26,10 @@ import {
 } from "../lib/constants";
 import { BUSINESS_EXPENSE_CATEGORIES } from "../lib/business-constants";
 import { formatCurrency } from "../lib/format";
+import { useTheme } from "../lib/theme-context";
+import { text as typography, fonts } from "../lib/typography";
+import { radii } from "../lib/radii";
+import { formatINR } from "../components/komal";
 import type {
   ExpenseCategory,
   PaymentMethod,
@@ -36,6 +43,8 @@ import type { RootStackParamList } from "../navigation/AppNavigator";
 export function AddExpenseScreen() {
   const navigation = useNavigation();
   const route = useRoute<RouteProp<RootStackParamList, "AddExpense">>();
+  const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
   const existingEntry = route.params?.entry;
   const isEditing = !!existingEntry;
   const [saving, setSaving] = useState(false);
@@ -95,14 +104,12 @@ export function AddExpenseScreen() {
     fetchClients();
   }, []);
 
-  // Force business investment off when funding is debt-linked (not supported yet)
   useEffect(() => {
     if (fundingSource !== "own_funds" && isBusinessInvestment) {
       setIsBusinessInvestment(false);
     }
   }, [fundingSource, isBusinessInvestment]);
 
-  // Auto-match payee against business_subscriptions (debounced).
   useEffect(() => {
     if (!isBusinessInvestment || !description || description.trim().length < 3) {
       setBizSubscriptionId(null);
@@ -165,17 +172,11 @@ export function AddExpenseScreen() {
   const handleSave = async () => {
     const parsedAmount = parseFloat(amount);
     if (!parsedAmount || parsedAmount <= 0) {
-      Alert.alert(
-        "Validation Error",
-        "Please enter a valid amount greater than 0."
-      );
+      Alert.alert("Validation Error", "Please enter a valid amount greater than 0.");
       return;
     }
     if (!date.match(/^\d{4}-\d{2}-\d{2}$/)) {
-      Alert.alert(
-        "Validation Error",
-        "Please enter a valid date in YYYY-MM-DD format."
-      );
+      Alert.alert("Validation Error", "Please enter a valid date in YYYY-MM-DD format.");
       return;
     }
     if (fundingSource !== "own_funds" && !linkedDebtId) {
@@ -247,7 +248,6 @@ export function AddExpenseScreen() {
         if (error) throw error;
         savedExpenseId = existingEntry!.id;
 
-        // Same edit-transition logic as web: tear down any existing mirror, then re-mirror if wanted.
         if (wasBusinessOnLoad) {
           await runUnmirror(savedExpenseId);
         }
@@ -255,7 +255,6 @@ export function AddExpenseScreen() {
           await runMirror(savedExpenseId);
         }
       } else if (fundingSource !== "own_funds" && linkedDebtId) {
-        // Use RPC for debt-linked expense creation (transactional). Business mirror is not supported on debt-funded path.
         const { error } = await supabase.rpc("create_expense_with_debt_link", {
           p_user_id: user.id,
           p_amount: parsedAmount,
@@ -294,255 +293,249 @@ export function AddExpenseScreen() {
     }
   };
 
+  const inputStyle = {
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 14,
+    color: colors.textPrimary,
+    fontFamily: fonts.sansMedium,
+    fontSize: 14,
+  } as const;
+
+  const labelStyle = [typography.pillLabel, { color: colors.textTertiary, marginBottom: 6, marginTop: 16 }];
+
+  const previewAmount = parseFloat(amount);
+
   return (
-    <KeyboardAvoidingView
-      style={styles.flex}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-    >
-      <ScrollView
-        style={styles.screen}
-        contentContainerStyle={styles.content}
-        keyboardShouldPersistTaps="handled"
+    <View style={{ flex: 1, backgroundColor: colors.bg }}>
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
-        {/* Amount */}
-        <Text style={styles.label}>Amount *</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="0"
-          placeholderTextColor="#9ca3af"
-          keyboardType="numeric"
-          value={amount}
-          onChangeText={setAmount}
+        <PageHeader
+          title={isEditing ? "Edit Expense" : "Add Expense"}
+          actions={
+            <Pressable
+              onPress={() => navigation.goBack()}
+              style={({ pressed }) => [
+                styles.iconBtn,
+                {
+                  backgroundColor: colors.surface,
+                  borderColor: colors.border,
+                  transform: [{ scale: pressed ? 0.94 : 1 }],
+                },
+              ]}
+            >
+              <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={colors.textPrimary} strokeWidth={1.8} strokeLinecap="round">
+                <Path d="M18 6L6 18M6 6l12 12" />
+              </Svg>
+            </Pressable>
+          }
         />
-
-        {/* Category */}
-        <Text style={styles.label}>Category *</Text>
-        <TouchableOpacity
-          style={styles.pickerButton}
-          onPress={() => setShowCategoryPicker(true)}
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={{ paddingBottom: 40 + insets.bottom, paddingHorizontal: 24 }}
+          keyboardShouldPersistTaps="handled"
         >
-          <Text style={styles.pickerButtonText}>
+          <Text style={labelStyle}>Amount *</Text>
+          <TextInput
+            style={inputStyle}
+            placeholder="0"
+            placeholderTextColor={colors.textTertiary}
+            keyboardType="numeric"
+            value={amount}
+            onChangeText={setAmount}
+          />
+          {!!previewAmount && previewAmount > 0 && (
+            <Text style={[typography.caption, { color: colors.textSecondary, marginTop: 6 }]}>
+              {formatINR(previewAmount)}
+            </Text>
+          )}
+
+          <Text style={labelStyle}>Category *</Text>
+          <PickerField colors={colors} onPress={() => setShowCategoryPicker(true)}>
             {getCategoryLabel(category)}
-          </Text>
-          <Text style={styles.pickerArrow}>▼</Text>
-        </TouchableOpacity>
+          </PickerField>
 
-        {/* Description / Payee */}
-        <Text style={styles.label}>Description / Payee</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="e.g. Grocery Store, Netflix"
-          placeholderTextColor="#9ca3af"
-          value={description}
-          onChangeText={setDescription}
-        />
+          <Text style={labelStyle}>Description / Payee</Text>
+          <TextInput
+            style={inputStyle}
+            placeholder="e.g. Grocery Store, Netflix"
+            placeholderTextColor={colors.textTertiary}
+            value={description}
+            onChangeText={setDescription}
+          />
 
-        {/* Date */}
-        <Text style={styles.label}>Date *</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="YYYY-MM-DD"
-          placeholderTextColor="#9ca3af"
-          value={date}
-          onChangeText={setDate}
-        />
+          <Text style={labelStyle}>Date *</Text>
+          <TextInput
+            style={inputStyle}
+            placeholder="YYYY-MM-DD"
+            placeholderTextColor={colors.textTertiary}
+            value={date}
+            onChangeText={setDate}
+          />
 
-        {/* Payment Method */}
-        <Text style={styles.label}>Payment Method</Text>
-        <TouchableOpacity
-          style={styles.pickerButton}
-          onPress={() => setShowPaymentPicker(true)}
-        >
-          <Text style={styles.pickerButtonText}>
+          <Text style={labelStyle}>Payment Method</Text>
+          <PickerField colors={colors} onPress={() => setShowPaymentPicker(true)}>
             {getPaymentLabel(paymentMethod)}
-          </Text>
-          <Text style={styles.pickerArrow}>▼</Text>
-        </TouchableOpacity>
+          </PickerField>
 
-        {/* Funding Source */}
-        <Text style={styles.label}>Funding Source</Text>
-        <TouchableOpacity
-          style={styles.pickerButton}
-          onPress={() => setShowFundingSourcePicker(true)}
-        >
-          <Text style={styles.pickerButtonText}>
+          <Text style={labelStyle}>Funding Source</Text>
+          <PickerField colors={colors} onPress={() => setShowFundingSourcePicker(true)}>
             {getFundingSourceLabel(fundingSource)}
-          </Text>
-          <Text style={styles.pickerArrow}>▼</Text>
-        </TouchableOpacity>
+          </PickerField>
 
-        {/* Debt Selector (conditional) */}
-        {fundingSource !== "own_funds" && (
-          <>
-            <Text style={styles.label}>Select Debt *</Text>
-            {activeDebts.length === 0 ? (
-              <Text style={styles.hintText}>No active debts found.</Text>
-            ) : (
-              <>
-                <TouchableOpacity
-                  style={styles.pickerButton}
-                  onPress={() => setShowDebtPicker(true)}
-                >
-                  <Text
-                    style={[
-                      styles.pickerButtonText,
-                      !linkedDebtId && { color: "#9ca3af" },
-                    ]}
-                    numberOfLines={1}
-                  >
+          {fundingSource !== "own_funds" && (
+            <>
+              <Text style={labelStyle}>Select Debt *</Text>
+              {activeDebts.length === 0 ? (
+                <Text style={[typography.caption, { color: colors.textSecondary, marginTop: 4 }]}>
+                  No active debts found.
+                </Text>
+              ) : (
+                <>
+                  <PickerField colors={colors} onPress={() => setShowDebtPicker(true)} placeholder={!linkedDebtId}>
                     {linkedDebtId
                       ? debtPickerOptions.find((d) => d.value === linkedDebtId)?.label ?? "Select a debt"
                       : "Select a debt"}
-                  </Text>
-                  <Text style={styles.pickerArrow}>▼</Text>
-                </TouchableOpacity>
-                {selectedDebt && fundingSource === "debt_repayment" && selectedDebt.emi_amount != null && (
-                  <Text style={styles.hintText}>
-                    EMI amount: {formatCurrency(selectedDebt.emi_amount)}
-                  </Text>
-                )}
-              </>
-            )}
-          </>
-        )}
+                  </PickerField>
+                  {selectedDebt && fundingSource === "debt_repayment" && selectedDebt.emi_amount != null && (
+                    <Text style={[typography.caption, { color: colors.textSecondary, marginTop: 6 }]}>
+                      EMI amount: {formatCurrency(selectedDebt.emi_amount)}
+                    </Text>
+                  )}
+                </>
+              )}
+            </>
+          )}
 
-        {/* Business Investment block (own_funds only) */}
-        {fundingSource === "own_funds" && (
-          <View style={styles.businessBlock}>
-            <View style={styles.switchRow}>
-              <Text style={styles.label}>Paid from my pocket for the business</Text>
-              <Switch
-                value={isBusinessInvestment}
-                onValueChange={(val) => {
-                  setIsBusinessInvestment(val);
-                  if (!val) {
-                    setBizSubscriptionId(null);
-                    setBizSubscriptionName(null);
-                    setBizClientId(null);
-                  }
-                }}
-                trackColor={{ false: "#d1d5db", true: "#99f6e4" }}
-                thumbColor={isBusinessInvestment ? "#0d9488" : "#f4f4f5"}
-              />
-            </View>
-
-            {isBusinessInvestment && (
-              <View>
-                {bizSubscriptionName && (
-                  <Text style={styles.matchHint}>
-                    Matched to subscription: {bizSubscriptionName} — will link automatically
-                  </Text>
-                )}
-
-                <Text style={styles.label}>Business Category *</Text>
-                <TouchableOpacity
-                  style={styles.pickerButton}
-                  onPress={() => setShowBizCategoryPicker(true)}
-                >
-                  <Text style={styles.pickerButtonText}>
-                    {getBizCategoryLabel(bizCategory)}
-                  </Text>
-                  <Text style={styles.pickerArrow}>▼</Text>
-                </TouchableOpacity>
-
-                <Text style={styles.label}>Vendor Name *</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="e.g. Claude.ai, AWS"
-                  placeholderTextColor="#9ca3af"
-                  value={bizVendorName}
-                  onChangeText={setBizVendorName}
-                />
-
-                {businessClients.length > 0 && (
-                  <>
-                    <Text style={styles.label}>Link to Client (optional)</Text>
-                    <TouchableOpacity
-                      style={styles.pickerButton}
-                      onPress={() => setShowBizClientPicker(true)}
-                    >
-                      <Text
-                        style={[
-                          styles.pickerButtonText,
-                          !bizClientId && { color: "#9ca3af" },
-                        ]}
-                        numberOfLines={1}
-                      >
-                        {selectedBizClientLabel}
-                      </Text>
-                      <Text style={styles.pickerArrow}>▼</Text>
-                    </TouchableOpacity>
-                  </>
-                )}
-
-                <Text style={styles.label}>Reason (optional)</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="e.g. AI tooling for client work"
-                  placeholderTextColor="#9ca3af"
-                  value={bizReason}
-                  onChangeText={setBizReason}
+          {fundingSource === "own_funds" && (
+            <View
+              style={{
+                marginTop: 16,
+                padding: 14,
+                borderRadius: 12,
+                borderWidth: 1,
+                borderColor: colors.accent,
+                backgroundColor: colors.accentLight,
+              }}
+            >
+              <View style={[styles.switchRow, { marginTop: 0 }]}>
+                <Text style={[typography.pillLabel, { color: colors.textTertiary }]}>Paid from my pocket for business</Text>
+                <Switch
+                  value={isBusinessInvestment}
+                  onValueChange={(val) => {
+                    setIsBusinessInvestment(val);
+                    if (!val) {
+                      setBizSubscriptionId(null);
+                      setBizSubscriptionName(null);
+                      setBizClientId(null);
+                    }
+                  }}
+                  trackColor={{ false: colors.border, true: colors.accentLight }}
+                  thumbColor={isBusinessInvestment ? colors.accent : colors.surfaceAlt}
                 />
               </View>
-            )}
-          </View>
-        )}
 
-        {/* Is Recurring */}
-        <View style={styles.switchRow}>
-          <Text style={styles.label}>Is Recurring</Text>
-          <Switch
-            value={isRecurring}
-            onValueChange={setIsRecurring}
-            trackColor={{ false: "#d1d5db", true: "#99f6e4" }}
-            thumbColor={isRecurring ? "#0d9488" : "#f4f4f5"}
-          />
-        </View>
+              {isBusinessInvestment && (
+                <View>
+                  {bizSubscriptionName && (
+                    <Text style={[typography.caption, { color: colors.accent, marginTop: 10, fontFamily: fonts.sansSemibold }]}>
+                      Matched to subscription: {bizSubscriptionName} — will link automatically
+                    </Text>
+                  )}
 
-        {/* Recurrence Frequency */}
-        {isRecurring && (
-          <>
-            <Text style={styles.label}>Recurrence Frequency</Text>
-            <TouchableOpacity
-              style={styles.pickerButton}
-              onPress={() => setShowFrequencyPicker(true)}
-            >
-              <Text style={styles.pickerButtonText}>
-                {getFrequencyLabel(recurrenceFrequency)}
-              </Text>
-              <Text style={styles.pickerArrow}>▼</Text>
-            </TouchableOpacity>
-          </>
-        )}
+                  <Text style={labelStyle}>Business Category *</Text>
+                  <PickerField colors={colors} onPress={() => setShowBizCategoryPicker(true)}>
+                    {getBizCategoryLabel(bizCategory)}
+                  </PickerField>
 
-        {/* Notes */}
-        <Text style={styles.label}>Notes</Text>
-        <TextInput
-          style={[styles.input, styles.textArea]}
-          placeholder="Optional notes..."
-          placeholderTextColor="#9ca3af"
-          multiline
-          numberOfLines={3}
-          value={notes}
-          onChangeText={setNotes}
-        />
+                  <Text style={labelStyle}>Vendor Name *</Text>
+                  <TextInput
+                    style={inputStyle}
+                    placeholder="e.g. Claude.ai, AWS"
+                    placeholderTextColor={colors.textTertiary}
+                    value={bizVendorName}
+                    onChangeText={setBizVendorName}
+                  />
 
-        {/* Save Button */}
-        <TouchableOpacity
-          style={[styles.saveButton, saving && styles.saveButtonDisabled]}
-          onPress={handleSave}
-          disabled={saving}
-          activeOpacity={0.8}
-        >
-          {saving ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={styles.saveButtonText}>{isEditing ? "Update Expense" : "Save Expense"}</Text>
+                  {businessClients.length > 0 && (
+                    <>
+                      <Text style={labelStyle}>Link to Client (optional)</Text>
+                      <PickerField colors={colors} onPress={() => setShowBizClientPicker(true)} placeholder={!bizClientId}>
+                        {selectedBizClientLabel}
+                      </PickerField>
+                    </>
+                  )}
+
+                  <Text style={labelStyle}>Reason (optional)</Text>
+                  <TextInput
+                    style={inputStyle}
+                    placeholder="e.g. AI tooling for client work"
+                    placeholderTextColor={colors.textTertiary}
+                    value={bizReason}
+                    onChangeText={setBizReason}
+                  />
+                </View>
+              )}
+            </View>
           )}
-        </TouchableOpacity>
-      </ScrollView>
 
-      {/* Picker Modals */}
+          <View style={styles.switchRow}>
+            <Text style={[typography.pillLabel, { color: colors.textTertiary }]}>Is Recurring</Text>
+            <Switch
+              value={isRecurring}
+              onValueChange={setIsRecurring}
+              trackColor={{ false: colors.border, true: colors.accentLight }}
+              thumbColor={isRecurring ? colors.accent : colors.surfaceAlt}
+            />
+          </View>
+
+          {isRecurring && (
+            <>
+              <Text style={labelStyle}>Recurrence Frequency</Text>
+              <PickerField colors={colors} onPress={() => setShowFrequencyPicker(true)}>
+                {getFrequencyLabel(recurrenceFrequency)}
+              </PickerField>
+            </>
+          )}
+
+          <Text style={labelStyle}>Notes</Text>
+          <TextInput
+            style={[inputStyle, styles.textArea]}
+            placeholder="Optional notes..."
+            placeholderTextColor={colors.textTertiary}
+            multiline
+            numberOfLines={3}
+            value={notes}
+            onChangeText={setNotes}
+          />
+
+          <Pressable
+            onPress={handleSave}
+            disabled={saving}
+            style={({ pressed }) => [
+              styles.saveButton,
+              {
+                backgroundColor: colors.accent,
+                opacity: saving ? 0.6 : 1,
+                transform: [{ scale: pressed ? 0.97 : 1 }],
+              },
+            ]}
+          >
+            {saving ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={[styles.saveButtonText, { fontFamily: fonts.sansSemibold }]}>
+                {isEditing ? "Update Expense" : "Save Expense"}
+              </Text>
+            )}
+          </Pressable>
+        </ScrollView>
+      </KeyboardAvoidingView>
+
       <PickerModal
         visible={showCategoryPicker}
         onClose={() => setShowCategoryPicker(false)}
@@ -611,61 +604,68 @@ export function AddExpenseScreen() {
           title="Link to Client"
         />
       )}
-    </KeyboardAvoidingView>
+    </View>
+  );
+}
+
+function PickerField({
+  colors,
+  onPress,
+  children,
+  placeholder,
+}: {
+  colors: ReturnType<typeof useTheme>["colors"];
+  onPress: () => void;
+  children: React.ReactNode;
+  placeholder?: boolean;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [
+        {
+          backgroundColor: colors.surface,
+          borderColor: colors.border,
+          borderWidth: 1,
+          borderRadius: 12,
+          padding: 14,
+          flexDirection: "row",
+          justifyContent: "space-between",
+          alignItems: "center",
+          transform: [{ scale: pressed ? 0.97 : 1 }],
+        },
+      ]}
+    >
+      <Text
+        numberOfLines={1}
+        style={{
+          color: placeholder ? colors.textTertiary : colors.textPrimary,
+          fontFamily: fonts.sansMedium,
+          fontSize: 14,
+          flex: 1,
+          marginRight: 8,
+        }}
+      >
+        {children}
+      </Text>
+      <Text style={{ fontSize: 12, color: colors.textSecondary }}>▼</Text>
+    </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  flex: {
-    flex: 1,
-  },
-  screen: {
-    flex: 1,
-    backgroundColor: "#fff",
-  },
-  content: {
-    padding: 16,
-    paddingBottom: 40,
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#1f2937",
-    marginBottom: 6,
-    marginTop: 16,
-  },
-  input: {
+  flex: { flex: 1 },
+  iconBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: radii.full,
     borderWidth: 1,
-    borderColor: "#d1d5db",
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 16,
-    color: "#1f2937",
-    backgroundColor: "#f9fafb",
+    alignItems: "center",
+    justifyContent: "center",
   },
   textArea: {
     minHeight: 80,
     textAlignVertical: "top",
-  },
-  pickerButton: {
-    borderWidth: 1,
-    borderColor: "#d1d5db",
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    backgroundColor: "#f9fafb",
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  pickerButtonText: {
-    fontSize: 16,
-    color: "#1f2937",
-  },
-  pickerArrow: {
-    fontSize: 12,
-    color: "#6b7280",
   },
   switchRow: {
     flexDirection: "row",
@@ -674,38 +674,14 @@ const styles = StyleSheet.create({
     marginTop: 16,
   },
   saveButton: {
-    backgroundColor: "#0d9488",
     borderRadius: 12,
-    paddingVertical: 16,
+    paddingVertical: 14,
     alignItems: "center",
     marginTop: 24,
   },
-  saveButtonDisabled: {
-    opacity: 0.6,
-  },
   saveButtonText: {
     color: "#fff",
-    fontSize: 16,
-    fontWeight: "700",
-  },
-  hintText: {
-    fontSize: 12,
-    color: "#6b7280",
-    marginTop: 4,
-  },
-  businessBlock: {
-    marginTop: 16,
-    padding: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderStyle: "dashed",
-    borderColor: "#0d9488",
-    backgroundColor: "rgba(13, 148, 136, 0.05)",
-  },
-  matchHint: {
-    fontSize: 12,
-    color: "#0d9488",
-    marginTop: 8,
+    fontSize: 15,
     fontWeight: "600",
   },
 });

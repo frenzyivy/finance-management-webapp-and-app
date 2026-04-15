@@ -5,14 +5,21 @@ import {
   StyleSheet,
   ScrollView,
   TextInput,
-  TouchableOpacity,
+  Pressable,
   Alert,
   ActivityIndicator,
 } from "react-native";
-import { useRoute, RouteProp } from "@react-navigation/native";
+import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import Svg, { Path } from "react-native-svg";
 import { supabase } from "../lib/supabase";
 import { PriorityLevel } from "../types/database";
 import { PickerModal } from "../components/PickerModal";
+import { PageHeader } from "../components/PageHeader";
+import { useTheme } from "../lib/theme-context";
+import { text as typography, fonts } from "../lib/typography";
+import { radii } from "../lib/radii";
+import { formatINR } from "../components/komal";
 import type { RootStackParamList } from "../navigation/AppNavigator";
 
 const PRIORITY_OPTIONS = [
@@ -21,7 +28,7 @@ const PRIORITY_OPTIONS = [
   { value: "low", label: "Low" },
 ];
 
-const COLOR_OPTIONS = ["#0d9488", "#f59e0b", "#3b82f6", "#8b5cf6", "#ec4899", "#22c55e"];
+const COLOR_OPTIONS = ["#0D9373", "#F5A623", "#3B82F6", "#8B5CF6", "#EC4899", "#22C55E"];
 
 const ICON_OPTIONS = [
   { value: "piggy-bank", label: "Piggy Bank" },
@@ -32,8 +39,11 @@ const ICON_OPTIONS = [
   { value: "heart", label: "Heart" },
 ];
 
-export function AddGoalScreen({ navigation }: any) {
+export function AddGoalScreen() {
+  const navigation = useNavigation<any>();
   const route = useRoute<RouteProp<RootStackParamList, "AddGoal">>();
+  const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
   const existingGoal = route.params?.goal;
   const isEditing = !!existingGoal;
 
@@ -95,150 +105,191 @@ export function AddGoalScreen({ navigation }: any) {
     }
   };
 
+  const inputStyle = {
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 14,
+    color: colors.textPrimary,
+    fontFamily: fonts.sansMedium,
+    fontSize: 14,
+  } as const;
+
+  const labelStyle = [typography.pillLabel, { color: colors.textTertiary, marginBottom: 6, marginTop: 16 }];
+
+  const previewAmount = parseFloat(targetAmount);
+
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Text style={styles.label}>Goal Name *</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="e.g. Emergency Fund"
-        value={name}
-        onChangeText={setName}
-      />
-
-      <Text style={styles.label}>Target Amount *</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="e.g. 100000"
-        keyboardType="numeric"
-        value={targetAmount}
-        onChangeText={setTargetAmount}
-      />
-
-      <Text style={styles.label}>Priority</Text>
-      <TouchableOpacity
-        style={styles.pickerBtn}
-        onPress={() => setPriorityPickerVisible(true)}
-      >
-        <Text style={styles.pickerBtnText}>
-          {PRIORITY_OPTIONS.find((p) => p.value === priority)?.label || "Select"}
-        </Text>
-      </TouchableOpacity>
-
-      <PickerModal
-        visible={priorityPickerVisible}
-        onClose={() => setPriorityPickerVisible(false)}
-        options={PRIORITY_OPTIONS}
-        selectedValue={priority}
-        onSelect={(val) => {
-          setPriority(val as PriorityLevel);
-          setPriorityPickerVisible(false);
-        }}
-      />
-
-      <Text style={styles.label}>Target Date (optional)</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="YYYY-MM-DD"
-        value={deadline}
-        onChangeText={setDeadline}
-      />
-
-      <Text style={styles.label}>Color</Text>
-      <View style={styles.colorRow}>
-        {COLOR_OPTIONS.map((c) => (
-          <TouchableOpacity
-            key={c}
-            style={[
-              styles.colorCircle,
-              { backgroundColor: c },
-              selectedColor === c && styles.colorCircleSelected,
+    <View style={{ flex: 1, backgroundColor: colors.bg }}>
+      <PageHeader
+        title={isEditing ? "Edit Goal" : "New Goal"}
+        actions={
+          <Pressable
+            onPress={() => navigation.goBack()}
+            style={({ pressed }) => [
+              styles.iconBtn,
+              {
+                backgroundColor: colors.surface,
+                borderColor: colors.border,
+                transform: [{ scale: pressed ? 0.94 : 1 }],
+              },
             ]}
-            onPress={() => setSelectedColor(c)}
-          />
-        ))}
-      </View>
-
-      <Text style={styles.label}>Icon</Text>
-      <TouchableOpacity
-        style={styles.pickerBtn}
-        onPress={() => setIconPickerVisible(true)}
-      >
-        <Text style={styles.pickerBtnText}>
-          {ICON_OPTIONS.find((i) => i.value === selectedIcon)?.label || "Select"}
-        </Text>
-      </TouchableOpacity>
-
-      <PickerModal
-        visible={iconPickerVisible}
-        onClose={() => setIconPickerVisible(false)}
-        options={ICON_OPTIONS}
-        selectedValue={selectedIcon}
-        onSelect={(val) => {
-          setSelectedIcon(val);
-          setIconPickerVisible(false);
-        }}
+          >
+            <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={colors.textPrimary} strokeWidth={1.8} strokeLinecap="round">
+              <Path d="M18 6L6 18M6 6l12 12" />
+            </Svg>
+          </Pressable>
+        }
       />
-
-      <TouchableOpacity
-        style={[styles.saveBtn, saving && { opacity: 0.6 }]}
-        onPress={handleSave}
-        disabled={saving}
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={{ paddingBottom: 40 + insets.bottom, paddingHorizontal: 24 }}
+        keyboardShouldPersistTaps="handled"
       >
-        {saving ? (
-          <ActivityIndicator color="#fff" />
-        ) : (
-          <Text style={styles.saveBtnText}>{isEditing ? "Update Goal" : "Save Goal"}</Text>
+        <Text style={labelStyle}>Goal Name *</Text>
+        <TextInput
+          style={inputStyle}
+          placeholder="e.g. Emergency Fund"
+          placeholderTextColor={colors.textTertiary}
+          value={name}
+          onChangeText={setName}
+        />
+
+        <Text style={labelStyle}>Target Amount *</Text>
+        <TextInput
+          style={inputStyle}
+          placeholder="e.g. 100000"
+          placeholderTextColor={colors.textTertiary}
+          keyboardType="numeric"
+          value={targetAmount}
+          onChangeText={setTargetAmount}
+        />
+        {!!previewAmount && previewAmount > 0 && (
+          <Text style={[typography.caption, { color: colors.textSecondary, marginTop: 6 }]}>
+            {formatINR(previewAmount)}
+          </Text>
         )}
-      </TouchableOpacity>
-    </ScrollView>
+
+        <Text style={labelStyle}>Priority</Text>
+        <Pressable
+          onPress={() => setPriorityPickerVisible(true)}
+          style={({ pressed }) => [
+            inputStyle,
+            { flexDirection: "row", justifyContent: "space-between", alignItems: "center", transform: [{ scale: pressed ? 0.97 : 1 }] },
+          ]}
+        >
+          <Text style={{ color: colors.textPrimary, fontFamily: fonts.sansMedium, fontSize: 14 }}>
+            {PRIORITY_OPTIONS.find((p) => p.value === priority)?.label || "Select"}
+          </Text>
+          <Text style={{ fontSize: 12, color: colors.textSecondary }}>▼</Text>
+        </Pressable>
+
+        <PickerModal
+          visible={priorityPickerVisible}
+          onClose={() => setPriorityPickerVisible(false)}
+          options={PRIORITY_OPTIONS}
+          selectedValue={priority}
+          onSelect={(val) => {
+            setPriority(val as PriorityLevel);
+            setPriorityPickerVisible(false);
+          }}
+        />
+
+        <Text style={labelStyle}>Target Date (optional)</Text>
+        <TextInput
+          style={inputStyle}
+          placeholder="YYYY-MM-DD"
+          placeholderTextColor={colors.textTertiary}
+          value={deadline}
+          onChangeText={setDeadline}
+        />
+
+        <Text style={labelStyle}>Color</Text>
+        <View style={{ flexDirection: "row", gap: 12, marginTop: 4 }}>
+          {COLOR_OPTIONS.map((c) => (
+            <Pressable
+              key={c}
+              onPress={() => setSelectedColor(c)}
+              style={({ pressed }) => [
+                {
+                  width: 36,
+                  height: 36,
+                  borderRadius: 18,
+                  backgroundColor: c,
+                  transform: [{ scale: pressed ? 0.97 : 1 }],
+                  borderWidth: selectedColor === c ? 3 : 0,
+                  borderColor: colors.textPrimary,
+                },
+              ]}
+            />
+          ))}
+        </View>
+
+        <Text style={labelStyle}>Icon</Text>
+        <Pressable
+          onPress={() => setIconPickerVisible(true)}
+          style={({ pressed }) => [
+            inputStyle,
+            { flexDirection: "row", justifyContent: "space-between", alignItems: "center", transform: [{ scale: pressed ? 0.97 : 1 }] },
+          ]}
+        >
+          <Text style={{ color: colors.textPrimary, fontFamily: fonts.sansMedium, fontSize: 14 }}>
+            {ICON_OPTIONS.find((i) => i.value === selectedIcon)?.label || "Select"}
+          </Text>
+          <Text style={{ fontSize: 12, color: colors.textSecondary }}>▼</Text>
+        </Pressable>
+
+        <PickerModal
+          visible={iconPickerVisible}
+          onClose={() => setIconPickerVisible(false)}
+          options={ICON_OPTIONS}
+          selectedValue={selectedIcon}
+          onSelect={(val) => {
+            setSelectedIcon(val);
+            setIconPickerVisible(false);
+          }}
+        />
+
+        <Pressable
+          onPress={handleSave}
+          disabled={saving}
+          style={({ pressed }) => [
+            styles.saveBtn,
+            {
+              backgroundColor: colors.accent,
+              opacity: saving ? 0.6 : 1,
+              transform: [{ scale: pressed ? 0.97 : 1 }],
+            },
+          ]}
+        >
+          {saving ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text style={[styles.saveBtnText, { fontFamily: fonts.sansSemibold }]}>
+              {isEditing ? "Update Goal" : "Save Goal"}
+            </Text>
+          )}
+        </Pressable>
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#fff" },
-  content: { padding: 20, paddingBottom: 40 },
-  label: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#1f2937",
-    marginBottom: 6,
-    marginTop: 16,
-  },
-  input: {
+  iconBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: radii.full,
     borderWidth: 1,
-    borderColor: "#d1d5db",
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 16,
-    color: "#1f2937",
-  },
-  pickerBtn: {
-    borderWidth: 1,
-    borderColor: "#d1d5db",
-    borderRadius: 8,
-    padding: 12,
-  },
-  pickerBtnText: { fontSize: 16, color: "#1f2937" },
-  colorRow: {
-    flexDirection: "row",
-    gap: 12,
-    marginTop: 4,
-  },
-  colorCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-  },
-  colorCircleSelected: {
-    borderWidth: 3,
-    borderColor: "#1f2937",
+    alignItems: "center",
+    justifyContent: "center",
   },
   saveBtn: {
-    backgroundColor: "#0d9488",
-    padding: 16,
+    paddingVertical: 14,
     borderRadius: 12,
     alignItems: "center",
     marginTop: 32,
   },
-  saveBtnText: { color: "#fff", fontSize: 16, fontWeight: "bold" },
+  saveBtnText: { color: "#fff", fontSize: 15, fontWeight: "600" },
 });

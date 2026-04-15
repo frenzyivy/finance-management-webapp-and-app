@@ -3,17 +3,28 @@ import {
   View,
   Text,
   StyleSheet,
-  FlatList,
+  ScrollView,
   RefreshControl,
   ActivityIndicator,
-  TouchableOpacity,
+  Pressable,
   Alert,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import Svg, { Path } from "react-native-svg";
+import { format } from "date-fns";
 import { supabase } from "../lib/supabase";
 import { useSyncStore } from "../lib/sync-store";
-import { formatCurrency, formatDate } from "../lib/format";
 import { BUSINESS_EXPENSE_CATEGORIES } from "../lib/business-constants";
+import { useTheme } from "../lib/theme-context";
+import { text as typography } from "../lib/typography";
+import { navHeight } from "../lib/radii";
+import { PageHeader } from "../components/PageHeader";
+import {
+  SummaryBanner,
+  TransactionCard,
+  formatINR,
+} from "../components/komal";
 import type { BusinessExpense } from "../types/business";
 
 function getCategoryLabel(value: string): string {
@@ -22,6 +33,8 @@ function getCategoryLabel(value: string): string {
 
 export function BusinessExpensesScreen() {
   const navigation = useNavigation<any>();
+  const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
   const syncVersion = useSyncStore((s) => s.syncVersion);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -78,7 +91,7 @@ export function BusinessExpensesScreen() {
     (entry: BusinessExpense) => {
       Alert.alert(
         entry.vendor_name,
-        formatCurrency(entry.amount),
+        formatINR(entry.amount),
         [
           { text: "Cancel", style: "cancel" },
           {
@@ -107,203 +120,118 @@ export function BusinessExpensesScreen() {
     [fetchData, navigation]
   );
 
-  const renderItem = ({ item }: { item: BusinessExpense }) => (
-    <TouchableOpacity
-      style={styles.entryRow}
-      onLongPress={() => handleLongPress(item)}
-      activeOpacity={0.7}
-    >
-      <View style={styles.entryLeft}>
-        <Text style={styles.entryDescription} numberOfLines={1}>
-          {item.vendor_name}
-        </Text>
-        <View style={styles.entryMeta}>
-          <View style={styles.badge}>
-            <Text style={styles.badgeText}>
-              {getCategoryLabel(item.category)}
-            </Text>
-          </View>
-          {item.sub_category && (
-            <Text style={styles.subCategory}>{item.sub_category}</Text>
-          )}
-        </View>
-        <Text style={styles.entryDate}>{formatDate(item.date)}</Text>
-      </View>
-      <Text style={styles.entryAmount}>-{formatCurrency(item.amount)}</Text>
-    </TouchableOpacity>
-  );
-
   if (loading) {
     return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#185FA5" />
+      <View style={[styles.centered, { backgroundColor: colors.bg }]}>
+        <ActivityIndicator size="large" color={colors.accent} />
       </View>
     );
   }
 
   return (
-    <View style={styles.screen}>
-      {/* Summary Bar */}
-      <View style={styles.summaryBar}>
-        <Text style={styles.summaryLabel}>Total This Month</Text>
-        <Text style={styles.summaryAmount}>
-          {formatCurrency(totalThisMonth)}
-        </Text>
-      </View>
-
-      <FlatList
-        data={entries}
-        keyExtractor={(item) => item.id}
-        renderItem={renderItem}
-        contentContainerStyle={styles.listContent}
+    <View style={{ flex: 1, backgroundColor: colors.bg }}>
+      <ScrollView
+        contentContainerStyle={{
+          paddingBottom: navHeight + 40 + insets.bottom,
+        }}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
-            tintColor="#185FA5"
+            tintColor={colors.accent}
           />
         }
-        ListEmptyComponent={
+      >
+        <PageHeader
+          title="Business Expenses"
+          actions={
+            <Pressable
+              onPress={() => navigation.navigate("AddBusinessExpense")}
+              style={({ pressed }) => [
+                styles.iconBtn,
+                {
+                  backgroundColor: colors.surface,
+                  borderColor: colors.border,
+                  transform: [{ scale: pressed ? 0.97 : 1 }],
+                },
+              ]}
+            >
+              <Svg
+                width={18}
+                height={18}
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke={colors.textPrimary}
+                strokeWidth={1.8}
+                strokeLinecap="round"
+              >
+                <Path d="M12 5v14M5 12h14" />
+              </Svg>
+            </Pressable>
+          }
+        />
+
+        <SummaryBanner
+          label="Total This Month"
+          value={totalThisMonth}
+          tone="expense"
+          emoji="💸"
+        />
+
+        {entries.length === 0 ? (
           <View style={styles.emptyState}>
-            <Text style={styles.emptyText}>No business expenses this month.</Text>
-            <Text style={styles.emptyHint}>
+            <Text
+              style={[
+                typography.caption,
+                { color: colors.textSecondary, marginBottom: 4 },
+              ]}
+            >
+              No business expenses this month.
+            </Text>
+            <Text
+              style={[typography.caption, { color: colors.textTertiary }]}
+            >
               Tap the + button to add your first expense.
             </Text>
           </View>
-        }
-      />
-
-      {/* FAB */}
-      <TouchableOpacity
-        style={styles.fab}
-        onPress={() => navigation.navigate("AddBusinessExpense")}
-        activeOpacity={0.8}
-      >
-        <Text style={styles.fabText}>+</Text>
-      </TouchableOpacity>
+        ) : (
+          entries.map((item) => (
+            <TransactionCard
+              key={item.id}
+              name={item.vendor_name}
+              kind="expense"
+              category={item.category}
+              categoryLabel={getCategoryLabel(item.category)}
+              metaTag={item.sub_category ?? undefined}
+              metaTagTone="muted"
+              date={format(new Date(item.date), "d MMM")}
+              amount={item.amount}
+              onPress={() => handleLongPress(item)}
+            />
+          ))
+        )}
+      </ScrollView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: "#f8fafc",
-  },
   centered: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#f8fafc",
   },
-  summaryBar: {
-    backgroundColor: "#ef4444",
-    paddingVertical: 16,
-    paddingHorizontal: 16,
-    flexDirection: "row",
-    justifyContent: "space-between",
+  iconBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 100,
+    borderWidth: 1,
     alignItems: "center",
-  },
-  summaryLabel: {
-    color: "#fff",
-    fontSize: 14,
-    fontWeight: "500",
-  },
-  summaryAmount: {
-    color: "#fff",
-    fontSize: 20,
-    fontWeight: "700",
-  },
-  listContent: {
-    padding: 16,
-    paddingBottom: 100,
-  },
-  entryRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#fff",
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 10,
-    elevation: 2,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-  },
-  entryLeft: {
-    flex: 1,
-    marginRight: 8,
-  },
-  entryDescription: {
-    fontSize: 15,
-    fontWeight: "600",
-    color: "#1f2937",
-    marginBottom: 4,
-  },
-  entryMeta: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    marginBottom: 4,
-  },
-  badge: {
-    backgroundColor: "#fee2e2",
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 10,
-  },
-  badgeText: {
-    fontSize: 11,
-    fontWeight: "600",
-    color: "#dc2626",
-  },
-  subCategory: {
-    fontSize: 11,
-    color: "#6b7280",
-  },
-  entryDate: {
-    fontSize: 12,
-    color: "#6b7280",
-  },
-  entryAmount: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: "#ef4444",
+    justifyContent: "center",
   },
   emptyState: {
     alignItems: "center",
     paddingVertical: 48,
-  },
-  emptyText: {
-    fontSize: 15,
-    color: "#6b7280",
-    marginBottom: 4,
-  },
-  emptyHint: {
-    fontSize: 13,
-    color: "#9ca3af",
-  },
-  fab: {
-    position: "absolute",
-    bottom: 24,
-    right: 24,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: "#185FA5",
-    justifyContent: "center",
-    alignItems: "center",
-    elevation: 6,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-  },
-  fabText: {
-    fontSize: 28,
-    color: "#fff",
-    fontWeight: "300",
-    marginTop: -2,
+    marginHorizontal: 24,
   },
 });
