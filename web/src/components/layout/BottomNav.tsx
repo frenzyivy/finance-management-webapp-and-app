@@ -71,7 +71,7 @@ export function BottomNav() {
   return (
     <>
       <nav
-        className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[430px] z-[100]"
+        className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[430px] z-[100] lg:hidden"
         style={{
           height: `calc(var(--nav-height) + env(safe-area-inset-bottom, 0px))`,
           paddingBottom: "env(safe-area-inset-bottom, 0px)",
