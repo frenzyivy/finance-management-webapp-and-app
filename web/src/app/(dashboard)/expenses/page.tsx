@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { Suspense, useState, useEffect, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -67,6 +67,14 @@ function getPaymentLabel(m: string): string {
 }
 
 export default function ExpensesPage() {
+  return (
+    <Suspense fallback={null}>
+      <ExpensesPageInner />
+    </Suspense>
+  );
+}
+
+function ExpensesPageInner() {
   const searchParams = useSearchParams();
   const { entries, loading, fetchEntries, deleteEntry, totalThisMonth } = useExpenses();
 

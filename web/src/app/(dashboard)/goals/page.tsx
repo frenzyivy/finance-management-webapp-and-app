@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { Suspense, useState, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
@@ -39,6 +39,14 @@ const PRIORITY_TONE: Record<string, { bg: string; color: string; label: string }
 };
 
 export default function GoalsPage() {
+  return (
+    <Suspense fallback={null}>
+      <GoalsPageInner />
+    </Suspense>
+  );
+}
+
+function GoalsPageInner() {
   const searchParams = useSearchParams();
   const {
     goals,
