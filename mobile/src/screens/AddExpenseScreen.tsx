@@ -37,6 +37,18 @@ import type {
   FundingSource,
   Debt,
 } from "../types/database";
+
+type BnplPlatform = { id: string; name: string };
+type BnplPurchase = {
+  id: string;
+  platform_id: string;
+  item_name: string;
+  emi_amount: number;
+  paid_emis: number;
+  total_emis: number;
+  outstanding_balance: number;
+  status: string;
+};
 import type { BusinessClient, BusinessExpenseCategory } from "../types/business";
 import type { RootStackParamList } from "../navigation/AppNavigator";
 
@@ -62,7 +74,12 @@ export function AddExpenseScreen() {
     (existingEntry?.funding_source as FundingSource) ?? "own_funds"
   );
   const [linkedDebtId, setLinkedDebtId] = useState<string | null>(existingEntry?.linked_debt_id ?? null);
+  const [bnplPurchaseId, setBnplPurchaseId] = useState<string | null>(
+    existingEntry?.source_bnpl_purchase_id ?? null
+  );
   const [activeDebts, setActiveDebts] = useState<Debt[]>([]);
+  const [bnplPlatforms, setBnplPlatforms] = useState<BnplPlatform[]>([]);
+  const [bnplPurchases, setBnplPurchases] = useState<BnplPurchase[]>([]);
 
   // Business investment state
   const wasBusinessOnLoad = existingEntry?.is_business_investment ?? false;
@@ -92,6 +109,18 @@ export function AddExpenseScreen() {
         .order("creditor_name");
       if (data) setActiveDebts(data as Debt[]);
     }
+    async function fetchBnpl() {
+      const [{ data: platforms }, { data: purchases }] = await Promise.all([
+        supabase.from("bnpl_platforms").select("id,name").order("name"),
+        supabase
+          .from("bnpl_purchases")
+          .select("id,platform_id,item_name,emi_amount,paid_emis,total_emis,outstanding_balance,status")
+          .in("status", ["active", "overdue"])
+          .order("purchase_date", { ascending: false }),
+      ]);
+      if (platforms) setBnplPlatforms(platforms as BnplPlatform[]);
+      if (purchases) setBnplPurchases(purchases as BnplPurchase[]);
+    }
     async function fetchClients() {
       const { data } = await supabase
         .from("business_clients")
@@ -101,6 +130,7 @@ export function AddExpenseScreen() {
       if (data) setBusinessClients(data as BusinessClient[]);
     }
     fetchDebts();
+    fetchBnpl();
     fetchClients();
   }, []);
 
@@ -155,10 +185,50 @@ export function AddExpenseScreen() {
     FUNDING_SOURCES.find((f) => f.value === val)?.label ?? val;
 
   const selectedDebt = activeDebts.find((d) => d.id === linkedDebtId);
-  const debtPickerOptions = activeDebts.map((d) => ({
-    value: d.id,
-    label: `${d.creditor_name} — ${d.name} (${formatCurrency(d.outstanding_balance)} outstanding)`,
-  }));
+  const selectedBnplPurchase = bnplPurchases.find((p) => p.id === bnplPurchaseId);
+
+  // Flat list for PickerModal. Values are prefixed: "debt:<id>" or "bnpl:<id>".
+  const debtPickerOptions = [
+    ...activeDebts.map((d) => ({
+      value: `debt:${d.id}`,
+      label: `${d.creditor_name} — ${d.name} (${formatCurrency(d.outstanding_balance)} outstanding)`,
+    })),
+    ...bnplPlatforms.flatMap((platform) =>
+      bnplPurchases
+        .filter((p) => p.platform_id === platform.id)
+        .map((p) => ({
+          value: `bnpl:${p.id}`,
+          label:
+            fundingSource === "debt_repayment"
+              ? `${platform.name} · ${p.item_name} (EMI ${formatCurrency(p.emi_amount)} · ${p.paid_emis}/${p.total_emis})`
+              : `${platform.name} · ${p.item_name} (${formatCurrency(p.outstanding_balance)} outstanding)`,
+        }))
+    ),
+  ];
+
+  const debtPickerSelected = bnplPurchaseId
+    ? `bnpl:${bnplPurchaseId}`
+    : linkedDebtId
+    ? `debt:${linkedDebtId}`
+    : "";
+
+  const debtPickerLabel = (() => {
+    if (!debtPickerSelected) return "Select a debt or purchase";
+    return (
+      debtPickerOptions.find((o) => o.value === debtPickerSelected)?.label ??
+      "Select a debt or purchase"
+    );
+  })();
+
+  const handleDebtPickerSelect = (val: string) => {
+    if (val.startsWith("bnpl:")) {
+      setBnplPurchaseId(val.slice(5));
+      setLinkedDebtId(null);
+    } else if (val.startsWith("debt:")) {
+      setLinkedDebtId(val.slice(5));
+      setBnplPurchaseId(null);
+    }
+  };
 
   const getBizCategoryLabel = (val: string) =>
     BUSINESS_EXPENSE_CATEGORIES.find((c) => c.value === val)?.label ?? val;
@@ -179,8 +249,8 @@ export function AddExpenseScreen() {
       Alert.alert("Validation Error", "Please enter a valid date in YYYY-MM-DD format.");
       return;
     }
-    if (fundingSource !== "own_funds" && !linkedDebtId) {
-      Alert.alert("Validation Error", "Please select a debt to link.");
+    if (fundingSource !== "own_funds" && !linkedDebtId && !bnplPurchaseId) {
+      Alert.alert("Validation Error", "Please select a debt or BNPL purchase to link.");
       return;
     }
     if (isBusinessInvestment) {
@@ -213,6 +283,7 @@ export function AddExpenseScreen() {
         payment_method: paymentMethod,
         funding_source: fundingSource,
         linked_debt_id: fundingSource !== "own_funds" ? linkedDebtId : null,
+        source_bnpl_purchase_id: fundingSource !== "own_funds" ? bnplPurchaseId : null,
       };
 
       const wantsMirror = isBusinessInvestment && fundingSource === "own_funds";
@@ -254,6 +325,23 @@ export function AddExpenseScreen() {
         if (wantsMirror) {
           await runMirror(savedExpenseId);
         }
+      } else if (fundingSource !== "own_funds" && bnplPurchaseId) {
+        const { error } = await supabase.rpc("create_expense_with_bnpl_purchase_link", {
+          p_user_id: user.id,
+          p_amount: parsedAmount,
+          p_category: category,
+          p_sub_category: null,
+          p_payee_name: description.trim() || "Unknown",
+          p_date: date,
+          p_payment_method: paymentMethod,
+          p_funding_source: fundingSource,
+          p_bnpl_purchase_id: bnplPurchaseId,
+          p_is_emi: true,
+          p_is_recurring: isRecurring,
+          p_recurrence_frequency: isRecurring ? recurrenceFrequency : null,
+          p_notes: notes.trim() || null,
+        });
+        if (error) throw error;
       } else if (fundingSource !== "own_funds" && linkedDebtId) {
         const { error } = await supabase.rpc("create_expense_with_debt_link", {
           p_user_id: user.id,
@@ -389,21 +477,25 @@ export function AddExpenseScreen() {
 
           {fundingSource !== "own_funds" && (
             <>
-              <Text style={labelStyle}>Select Debt *</Text>
-              {activeDebts.length === 0 ? (
+              <Text style={labelStyle}>Select Debt or Purchase *</Text>
+              {debtPickerOptions.length === 0 ? (
                 <Text style={[typography.caption, { color: colors.textSecondary, marginTop: 4 }]}>
-                  No active debts found.
+                  No active debts or BNPL purchases found.
                 </Text>
               ) : (
                 <>
-                  <PickerField colors={colors} onPress={() => setShowDebtPicker(true)} placeholder={!linkedDebtId}>
-                    {linkedDebtId
-                      ? debtPickerOptions.find((d) => d.value === linkedDebtId)?.label ?? "Select a debt"
-                      : "Select a debt"}
+                  <PickerField colors={colors} onPress={() => setShowDebtPicker(true)} placeholder={!debtPickerSelected}>
+                    {debtPickerLabel}
                   </PickerField>
                   {selectedDebt && fundingSource === "debt_repayment" && selectedDebt.emi_amount != null && (
                     <Text style={[typography.caption, { color: colors.textSecondary, marginTop: 6 }]}>
                       EMI amount: {formatCurrency(selectedDebt.emi_amount)}
+                    </Text>
+                  )}
+                  {selectedBnplPurchase && fundingSource === "debt_repayment" && (
+                    <Text style={[typography.caption, { color: colors.textSecondary, marginTop: 6 }]}>
+                      EMI amount: {formatCurrency(selectedBnplPurchase.emi_amount)} · paid{" "}
+                      {selectedBnplPurchase.paid_emis}/{selectedBnplPurchase.total_emis}
                     </Text>
                   )}
                 </>
@@ -581,9 +673,9 @@ export function AddExpenseScreen() {
           visible={showDebtPicker}
           onClose={() => setShowDebtPicker(false)}
           options={debtPickerOptions}
-          selectedValue={linkedDebtId ?? ""}
-          onSelect={(val) => setLinkedDebtId(val)}
-          title="Select Debt"
+          selectedValue={debtPickerSelected}
+          onSelect={handleDebtPickerSelect}
+          title="Select Debt or Purchase"
         />
       )}
       <PickerModal

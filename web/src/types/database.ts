@@ -133,6 +133,7 @@ export interface ExpenseEntry {
   funding_source: FundingSource;
   is_auto_generated: boolean;
   source_debt_payment_id: string | null;
+  source_bnpl_purchase_id: string | null;
   source_recurring_id: string | null;
   last_recurrence_date: string | null;
   is_business_investment: boolean;
@@ -152,6 +153,12 @@ export interface SavingsGoal {
   color: string | null;
   icon: string | null;
   status: GoalStatus;
+  // Goals v2 additions (nullable — backwards compatible with v1)
+  category_id: string | null;
+  achieved_at: string | null;
+  archived_at: string | null;
+  linked_debt_id: string | null;
+  notes: string | null;
   created_at: string;
   updated_at: string;
 }

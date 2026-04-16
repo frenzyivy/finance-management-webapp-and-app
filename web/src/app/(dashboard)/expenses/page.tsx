@@ -3,8 +3,9 @@
 import { Suspense, useState, useEffect, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
-import { format } from "date-fns";
+import { format, parseISO } from "date-fns";
 import { Loader2 } from "lucide-react";
+import { formatMonth } from "@/lib/utils/date";
 
 import { useExpenses } from "@/hooks/use-expenses";
 import { ExpenseForm } from "@/components/forms/expense-form";
@@ -25,6 +26,7 @@ import { PageHeader, HeaderIconButton } from "@/components/layout/PageHeader";
 import {
   SummaryBanner,
   TabSwitcher,
+  MonthFilter,
   TransactionCard,
   InsightCard,
   formatINR,
@@ -76,9 +78,12 @@ export default function ExpensesPage() {
 
 function ExpensesPageInner() {
   const searchParams = useSearchParams();
-  const { entries, loading, fetchEntries, deleteEntry, totalThisMonth } = useExpenses();
+  const { entries, loading, fetchEntries, deleteEntry, availableMonths } = useExpenses();
 
   const [tab, setTab] = useState<TabKey>("all");
+  const [monthFilter, setMonthFilter] = useState<string>(() =>
+    new Date().toISOString().slice(0, 7)
+  );
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<ExpenseEntry | undefined>();
   const [deleteTarget, setDeleteTarget] = useState<ExpenseEntry | null>(null);
@@ -135,9 +140,42 @@ function ExpensesPageInner() {
   }, [budgetLimits, entries]);
 
   const filtered = useMemo(() => {
-    if (tab === "all") return entries;
-    return entries.filter((e) => e.category === tab);
-  }, [entries, tab]);
+    return entries.filter((e) => {
+      const catOk = tab === "all" || e.category === tab;
+      const monthOk = monthFilter === "all" || e.date.startsWith(monthFilter);
+      return catOk && monthOk;
+    });
+  }, [entries, tab, monthFilter]);
+
+  const filteredTotal = useMemo(
+    () => filtered.reduce((sum, e) => sum + Number(e.amount), 0),
+    [filtered]
+  );
+
+  const bannerLabel = useMemo(() => {
+    const monthLabel =
+      monthFilter === "all" ? "All time" : formatMonth(parseISO(monthFilter + "-01"));
+    const catLabel = tab === "all" ? null : TABS.find((t) => t.key === tab)?.label ?? null;
+    return catLabel ? `${monthLabel} · ${catLabel}` : monthLabel;
+  }, [monthFilter, tab]);
+
+  const monthOptions = useMemo(() => {
+    const currentMonth = new Date().toISOString().slice(0, 7);
+    // Drop any months in the future (e.g. post-dated entries) so the pill row
+    // always anchors on the current month and goes backward from there.
+    const pastOrCurrent = availableMonths.filter((m) => m <= currentMonth);
+    const withCurrent = pastOrCurrent.includes(currentMonth)
+      ? pastOrCurrent
+      : [currentMonth, ...pastOrCurrent].sort().reverse();
+    // Ensure the currently selected month is always present.
+    if (
+      monthFilter !== "all" &&
+      !withCurrent.includes(monthFilter)
+    ) {
+      return [monthFilter, ...withCurrent].sort().reverse();
+    }
+    return withCurrent;
+  }, [availableMonths, monthFilter]);
 
   const handleDelete = async () => {
     if (!deleteTarget) return;
@@ -172,8 +210,8 @@ function ExpensesPageInner() {
 
       <div className="animate d2">
         <SummaryBanner
-          label="This Month"
-          value={totalThisMonth}
+          label={bannerLabel}
+          value={filteredTotal}
           tone="expense"
           emoji="💸"
         />
@@ -191,6 +229,14 @@ function ExpensesPageInner() {
 
       <div className="animate d4">
         <TabSwitcher tabs={TABS} value={tab} onChange={setTab} />
+      </div>
+
+      <div className="animate d4">
+        <MonthFilter
+          value={monthFilter}
+          onChange={setMonthFilter}
+          months={monthOptions}
+        />
       </div>
 
       <div className="flex flex-col gap-1.5 mb-6">

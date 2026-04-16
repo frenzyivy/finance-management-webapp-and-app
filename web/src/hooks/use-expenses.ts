@@ -72,6 +72,12 @@ export function useExpenses() {
 
   const monthEntryCount = thisMonthEntries.length;
 
+  const availableMonths = useMemo(() => {
+    const set = new Set<string>();
+    for (const e of entries) set.add(e.date.slice(0, 7));
+    return Array.from(set).sort().reverse();
+  }, [entries]);
+
   const topCategory = useMemo(() => {
     if (thisMonthEntries.length === 0) return null;
 
@@ -107,5 +113,6 @@ export function useExpenses() {
     totalThisMonth,
     monthEntryCount,
     topCategory,
+    availableMonths,
   };
 }

@@ -17,6 +17,7 @@ import {
 } from "@/lib/constants/categories";
 import type { ExpenseEntry, Debt } from "@/types/database";
 import type { BusinessClient } from "@/types/business";
+import type { BnplPlatform, BnplPurchase } from "@/types/bnpl";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,7 +25,9 @@ import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -62,6 +65,7 @@ const expenseFormSchema = z
     ),
     funding_source: z.enum(["own_funds", "debt_funded", "debt_repayment"]),
     linked_debt_id: z.string().nullable(),
+    source_bnpl_purchase_id: z.string().nullable(),
     is_emi: z.boolean(),
     is_recurring: z.boolean(),
     recurrence_frequency: z
@@ -101,11 +105,12 @@ const expenseFormSchema = z
   )
   .refine(
     (data) => {
-      if (data.funding_source !== "own_funds" && !data.linked_debt_id) return false;
-      return true;
+      if (data.funding_source === "own_funds") return true;
+      // Either a debt OR a BNPL purchase must be picked
+      return !!data.linked_debt_id || !!data.source_bnpl_purchase_id;
     },
     {
-      message: "Please select a debt",
+      message: "Please select a debt or BNPL purchase",
       path: ["linked_debt_id"],
     }
   )
@@ -142,6 +147,8 @@ interface ExpenseFormProps {
 export function ExpenseForm({ entry, activeDebts: activeDebtsProp, onSuccess, onCancel }: ExpenseFormProps) {
   const [submitting, setSubmitting] = useState(false);
   const [activeDebts, setActiveDebts] = useState<Debt[]>(activeDebtsProp ?? []);
+  const [bnplPlatforms, setBnplPlatforms] = useState<BnplPlatform[]>([]);
+  const [bnplPurchases, setBnplPurchases] = useState<BnplPurchase[]>([]);
   const [businessClients, setBusinessClients] = useState<BusinessClient[]>([]);
   const [matchedSubscription, setMatchedSubscription] = useState<{ id: string; name: string } | null>(null);
   const isEditing = !!entry;
@@ -161,6 +168,24 @@ export function ExpenseForm({ entry, activeDebts: activeDebtsProp, onSuccess, on
     }
     fetchDebts();
   }, [activeDebtsProp]);
+
+  // Fetch BNPL platforms + active purchases so the debt picker can show them too.
+  useEffect(() => {
+    async function fetchBnpl() {
+      const supabase = createClient();
+      const [{ data: platforms }, { data: purchases }] = await Promise.all([
+        supabase.from("bnpl_platforms").select("*").order("name"),
+        supabase
+          .from("bnpl_purchases")
+          .select("*")
+          .in("status", ["active", "overdue"])
+          .order("purchase_date", { ascending: false }),
+      ]);
+      if (platforms) setBnplPlatforms(platforms as BnplPlatform[]);
+      if (purchases) setBnplPurchases(purchases as BnplPurchase[]);
+    }
+    fetchBnpl();
+  }, []);
 
   // Fetch active business clients (for optional link on mirrored expense)
   useEffect(() => {
@@ -194,6 +219,7 @@ export function ExpenseForm({ entry, activeDebts: activeDebtsProp, onSuccess, on
       payment_method: entry?.payment_method ?? undefined,
       funding_source: (entry?.funding_source as ExpenseFormValues["funding_source"]) ?? "own_funds",
       linked_debt_id: entry?.linked_debt_id ?? null,
+      source_bnpl_purchase_id: entry?.source_bnpl_purchase_id ?? null,
       is_emi: entry?.is_emi ?? false,
       is_recurring: entry?.is_recurring ?? false,
       recurrence_frequency: entry?.recurrence_frequency ?? null,
@@ -214,12 +240,14 @@ export function ExpenseForm({ entry, activeDebts: activeDebtsProp, onSuccess, on
   const selectedFrequency = watch("recurrence_frequency");
   const fundingSource = watch("funding_source");
   const linkedDebtId = watch("linked_debt_id");
+  const bnplPurchaseId = watch("source_bnpl_purchase_id");
   const isBusinessInvestment = watch("is_business_investment");
   const bizCategory = watch("biz_category");
   const bizClientId = watch("biz_client_id");
   const payeeName = watch("payee_name");
 
   const selectedDebt = activeDebts.find((d) => d.id === linkedDebtId);
+  const selectedBnplPurchase = bnplPurchases.find((p) => p.id === bnplPurchaseId);
 
   // Auto-match business subscription by payee name (only when business investment is checked)
   useEffect(() => {
@@ -313,6 +341,7 @@ export function ExpenseForm({ entry, activeDebts: activeDebtsProp, onSuccess, on
           payment_method: values.payment_method,
           funding_source: values.funding_source,
           linked_debt_id: values.linked_debt_id || null,
+          source_bnpl_purchase_id: values.source_bnpl_purchase_id || null,
           is_emi: values.is_emi,
           is_recurring: values.is_recurring,
           recurrence_frequency: values.is_recurring
@@ -339,6 +368,32 @@ export function ExpenseForm({ entry, activeDebts: activeDebtsProp, onSuccess, on
           toast.success("Expense updated & mirrored to business books");
         } else {
           toast.success("Expense entry updated successfully");
+        }
+      } else if (values.funding_source !== "own_funds" && values.source_bnpl_purchase_id) {
+        // Expense linked to a BNPL purchase — use the BNPL RPC (updates paid_emis + outstanding on repayment)
+        const { error } = await supabase.rpc("create_expense_with_bnpl_purchase_link", {
+          p_user_id: user.id,
+          p_amount: values.amount,
+          p_category: values.category,
+          p_sub_category: values.sub_category || null,
+          p_payee_name: values.payee_name,
+          p_date: values.date,
+          p_payment_method: values.payment_method,
+          p_funding_source: values.funding_source,
+          p_bnpl_purchase_id: values.source_bnpl_purchase_id,
+          p_is_emi: values.is_emi,
+          p_is_recurring: values.is_recurring,
+          p_recurrence_frequency: values.is_recurring
+            ? values.recurrence_frequency
+            : null,
+          p_notes: values.notes || null,
+        });
+        if (error) throw error;
+
+        if (values.funding_source === "debt_repayment") {
+          toast.success("EMI payment recorded — purchase updated");
+        } else {
+          toast.success("Expense added & linked to BNPL purchase");
         }
       } else if (values.funding_source !== "own_funds" && values.linked_debt_id) {
         // Use RPC for debt-linked expense creation (transactional)
@@ -550,31 +605,68 @@ export function ExpenseForm({ entry, activeDebts: activeDebtsProp, onSuccess, on
         </div>
       </div>
 
-      {/* Conditional: Debt Selector */}
+      {/* Conditional: Debt / BNPL purchase selector */}
       {fundingSource !== "own_funds" && (
         <div className="grid gap-2">
-          <Label>Select Debt</Label>
-          {activeDebts.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No active debts found.</p>
+          <Label>Select Debt or BNPL Purchase</Label>
+          {activeDebts.length === 0 && bnplPurchases.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No active debts or BNPL purchases found.</p>
           ) : (
             <Select
-              value={linkedDebtId ?? ""}
-              onValueChange={(val) =>
-                setValue("linked_debt_id", val, { shouldValidate: true })
+              value={
+                bnplPurchaseId
+                  ? `bnpl:${bnplPurchaseId}`
+                  : linkedDebtId
+                  ? `debt:${linkedDebtId}`
+                  : ""
               }
+              onValueChange={(val) => {
+                if (val.startsWith("bnpl:")) {
+                  setValue("source_bnpl_purchase_id", val.slice(5), { shouldValidate: true });
+                  setValue("linked_debt_id", null, { shouldValidate: true });
+                } else if (val.startsWith("debt:")) {
+                  setValue("linked_debt_id", val.slice(5), { shouldValidate: true });
+                  setValue("source_bnpl_purchase_id", null, { shouldValidate: true });
+                }
+              }}
             >
               <SelectTrigger className="w-full">
-                <SelectValue placeholder="Select a debt" />
+                <SelectValue placeholder="Select a debt or purchase" />
               </SelectTrigger>
               <SelectContent>
-                {activeDebts.map((debt) => {
-                  const unallocated = debt.original_amount - (debt.allocated_amount ?? 0);
+                {activeDebts.length > 0 && (
+                  <SelectGroup>
+                    <SelectLabel>Debts</SelectLabel>
+                    {activeDebts.map((debt) => {
+                      const unallocated = debt.original_amount - (debt.allocated_amount ?? 0);
+                      return (
+                        <SelectItem key={debt.id} value={`debt:${debt.id}`}>
+                          {debt.creditor_name} — {debt.name}
+                          {fundingSource === "debt_funded" && ` (${formatCurrency(unallocated)} unallocated)`}
+                          {fundingSource === "debt_repayment" && ` (${formatCurrency(debt.outstanding_balance)} outstanding)`}
+                        </SelectItem>
+                      );
+                    })}
+                  </SelectGroup>
+                )}
+                {bnplPlatforms.map((platform) => {
+                  const purchasesForPlatform = bnplPurchases.filter(
+                    (p) => p.platform_id === platform.id
+                  );
+                  if (purchasesForPlatform.length === 0) return null;
                   return (
-                    <SelectItem key={debt.id} value={debt.id}>
-                      {debt.creditor_name} — {debt.name}
-                      {fundingSource === "debt_funded" && ` (${formatCurrency(unallocated)} unallocated)`}
-                      {fundingSource === "debt_repayment" && ` (${formatCurrency(debt.outstanding_balance)} outstanding)`}
-                    </SelectItem>
+                    <SelectGroup key={platform.id}>
+                      <SelectLabel>{platform.name}</SelectLabel>
+                      {purchasesForPlatform.map((purchase) => (
+                        <SelectItem key={purchase.id} value={`bnpl:${purchase.id}`}>
+                          {purchase.item_name}
+                          {fundingSource === "debt_repayment" &&
+                            ` (EMI ${formatCurrency(purchase.emi_amount)} · ${purchase.paid_emis}/${purchase.total_emis})`}
+                          {fundingSource === "debt_funded" &&
+                            ` (${formatCurrency(purchase.outstanding_balance)} outstanding)`}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
                   );
                 })}
               </SelectContent>
@@ -586,6 +678,12 @@ export function ExpenseForm({ entry, activeDebts: activeDebtsProp, onSuccess, on
           {selectedDebt && fundingSource === "debt_repayment" && selectedDebt.emi_amount && (
             <p className="text-xs text-muted-foreground">
               EMI amount: {formatCurrency(selectedDebt.emi_amount)}
+            </p>
+          )}
+          {selectedBnplPurchase && fundingSource === "debt_repayment" && (
+            <p className="text-xs text-muted-foreground">
+              EMI amount: {formatCurrency(selectedBnplPurchase.emi_amount)} · paid{" "}
+              {selectedBnplPurchase.paid_emis}/{selectedBnplPurchase.total_emis}
             </p>
           )}
         </div>

@@ -6,7 +6,46 @@ import { Select as SelectPrimitive } from "@base-ui/react/select"
 import { cn } from "@/lib/utils"
 import { ChevronDownIcon, CheckIcon, ChevronUpIcon } from "lucide-react"
 
-const Select = SelectPrimitive.Root
+// Label registry so <SelectValue/> can render the chosen item's label without
+// needing the dropdown to have been opened. Each <SelectItem> registers its
+// rendered text against its value at mount; <SelectValue> looks it up.
+type LabelRegistry = {
+  register: (value: unknown, label: React.ReactNode) => () => void
+  resolve: (value: unknown) => React.ReactNode | undefined
+}
+
+const SelectLabelRegistryContext = React.createContext<LabelRegistry | null>(null)
+
+function useLabelRegistry(): LabelRegistry {
+  const [, force] = React.useReducer((n: number) => n + 1, 0)
+  const labelsRef = React.useRef(new Map<string, React.ReactNode>())
+  return React.useMemo<LabelRegistry>(
+    () => ({
+      register(value, label) {
+        const key = JSON.stringify(value ?? null)
+        labelsRef.current.set(key, label)
+        force()
+        return () => {
+          labelsRef.current.delete(key)
+          force()
+        }
+      },
+      resolve(value) {
+        return labelsRef.current.get(JSON.stringify(value ?? null))
+      },
+    }),
+    [],
+  )
+}
+
+function Select(props: React.ComponentProps<typeof SelectPrimitive.Root>) {
+  const registry = useLabelRegistry()
+  return (
+    <SelectLabelRegistryContext.Provider value={registry}>
+      <SelectPrimitive.Root {...props} />
+    </SelectLabelRegistryContext.Provider>
+  )
+}
 
 function SelectGroup({ className, ...props }: SelectPrimitive.Group.Props) {
   return (
@@ -18,13 +57,32 @@ function SelectGroup({ className, ...props }: SelectPrimitive.Group.Props) {
   )
 }
 
-function SelectValue({ className, ...props }: SelectPrimitive.Value.Props) {
+function SelectValue({
+  className,
+  children,
+  ...props
+}: SelectPrimitive.Value.Props) {
+  const registry = React.useContext(SelectLabelRegistryContext)
+
+  // If caller supplied children (string, node, or render function), respect it.
+  // Otherwise fall back to our registry so we never render the raw value.
+  const resolved =
+    children ??
+    ((value: unknown) => {
+      const fromRegistry = registry?.resolve(value)
+      if (fromRegistry !== undefined) return fromRegistry
+      // No item registered yet — render nothing rather than the raw value.
+      return null
+    })
+
   return (
     <SelectPrimitive.Value
       data-slot="select-value"
       className={cn("flex flex-1 text-left", className)}
       {...props}
-    />
+    >
+      {resolved}
+    </SelectPrimitive.Value>
   )
 }
 
@@ -113,6 +171,12 @@ function SelectItem({
   children,
   ...props
 }: SelectPrimitive.Item.Props) {
+  const registry = React.useContext(SelectLabelRegistryContext)
+  React.useEffect(() => {
+    if (!registry || props.value === undefined) return
+    return registry.register(props.value, children)
+  }, [registry, props.value, children])
+
   return (
     <SelectPrimitive.Item
       data-slot="select-item"

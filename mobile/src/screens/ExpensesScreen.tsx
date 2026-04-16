@@ -13,7 +13,7 @@ import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Path } from "react-native-svg";
-import { format } from "date-fns";
+import { format, parseISO } from "date-fns";
 import { supabase } from "../lib/supabase";
 import { useSyncStore } from "../lib/sync-store";
 import { EXPENSE_CATEGORIES, PAYMENT_METHODS } from "../lib/constants";
@@ -23,6 +23,7 @@ import { PageHeader } from "../components/PageHeader";
 import {
   SummaryBanner,
   TabSwitcher,
+  MonthFilter,
   TransactionCard,
   formatINR,
 } from "../components/komal";
@@ -74,30 +75,21 @@ export function ExpensesScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [entries, setEntries] = useState<ExpenseEntry[]>([]);
-  const [totalThisMonth, setTotalThisMonth] = useState(0);
   const [tab, setTab] = useState<TabKey>("all");
+  const [monthFilter, setMonthFilter] = useState<string>(() =>
+    format(new Date(), "yyyy-MM")
+  );
 
   const fetchData = useCallback(async () => {
     try {
-      const now = new Date();
-      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
-        .toISOString()
-        .split("T")[0];
-      const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0)
-        .toISOString()
-        .split("T")[0];
-
       const { data, error } = await supabase
         .from("expense_entries")
         .select("*")
-        .gte("date", startOfMonth)
-        .lte("date", endOfMonth)
         .order("date", { ascending: false });
 
       if (error) throw error;
       const items: ExpenseEntry[] = data ?? [];
       setEntries(items);
-      setTotalThisMonth(items.reduce((s, e) => s + e.amount, 0));
     } catch (err) {
       console.error("Expenses fetch error:", err);
     } finally {
@@ -116,9 +108,44 @@ export function ExpensesScreen() {
   }, [navigation, fetchData]);
 
   const filtered = useMemo(() => {
-    if (tab === "all") return entries;
-    return entries.filter((e) => e.category === tab);
-  }, [entries, tab]);
+    return entries.filter((e) => {
+      const catOk = tab === "all" || e.category === tab;
+      const monthOk = monthFilter === "all" || e.date.startsWith(monthFilter);
+      return catOk && monthOk;
+    });
+  }, [entries, tab, monthFilter]);
+
+  const filteredTotal = useMemo(
+    () => filtered.reduce((s, e) => s + Number(e.amount), 0),
+    [filtered]
+  );
+
+  const availableMonths = useMemo(() => {
+    const currentMonth = format(new Date(), "yyyy-MM");
+    const set = new Set<string>();
+    for (const e of entries) set.add(e.date.slice(0, 7));
+    // Anchor on the current month: drop anything in the future.
+    const pastOrCurrent = Array.from(set)
+      .filter((m) => m <= currentMonth)
+      .sort()
+      .reverse();
+    const withCurrent = pastOrCurrent.includes(currentMonth)
+      ? pastOrCurrent
+      : [currentMonth, ...pastOrCurrent].sort().reverse();
+    if (monthFilter !== "all" && !withCurrent.includes(monthFilter)) {
+      return [monthFilter, ...withCurrent].sort().reverse();
+    }
+    return withCurrent;
+  }, [entries, monthFilter]);
+
+  const bannerLabel = useMemo(() => {
+    const monthLabel =
+      monthFilter === "all"
+        ? "All time"
+        : format(parseISO(monthFilter + "-01"), "MMMM yyyy");
+    const catLabel = tab === "all" ? null : TABS.find((t) => t.key === tab)?.label ?? null;
+    return catLabel ? `${monthLabel} · ${catLabel}` : monthLabel;
+  }, [monthFilter, tab]);
 
   const handleLongPress = useCallback(
     (entry: ExpenseEntry) => {
@@ -198,13 +225,18 @@ export function ExpensesScreen() {
       />
 
       <SummaryBanner
-        label="This Month"
-        value={totalThisMonth}
+        label={bannerLabel}
+        value={filteredTotal}
         tone="expense"
         emoji="💸"
       />
 
       <TabSwitcher tabs={TABS} value={tab} onChange={setTab} />
+      <MonthFilter
+        value={monthFilter}
+        onChange={setMonthFilter}
+        months={availableMonths}
+      />
 
       {filtered.length === 0 ? (
         <Text style={[styles.empty, { color: colors.textSecondary }]}>

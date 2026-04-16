@@ -106,6 +106,7 @@ export interface ExpenseEntry {
   funding_source: FundingSource;
   is_auto_generated: boolean;
   source_debt_payment_id: string | null;
+  source_bnpl_purchase_id: string | null;
   source_recurring_id: string | null;
   last_recurrence_date: string | null;
   is_business_investment: boolean;

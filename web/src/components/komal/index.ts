@@ -5,6 +5,7 @@ export { StatPillRow } from "./StatPillRow";
 export { SectionHeader } from "./SectionHeader";
 export { TransactionCard } from "./TransactionCard";
 export { TabSwitcher } from "./TabSwitcher";
+export { MonthFilter } from "./MonthFilter";
 export { ChartCard } from "./ChartCard";
 export { DebtHealthGrid } from "./DebtHealthGrid";
 export { CategoryBreakdownRow, CATEGORY_COLORS } from "./CategoryBreakdownRow";
