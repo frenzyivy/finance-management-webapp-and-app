@@ -38,11 +38,16 @@ function useLabelRegistry(): LabelRegistry {
   )
 }
 
-function Select(props: React.ComponentProps<typeof SelectPrimitive.Root>) {
+function Select({ onValueChange, ...props }: Omit<React.ComponentProps<typeof SelectPrimitive.Root>, 'onValueChange'> & {
+  onValueChange?: (value: string | null, eventDetails: { event: Event }) => void
+}) {
   const registry = useLabelRegistry()
   return (
     <SelectLabelRegistryContext.Provider value={registry}>
-      <SelectPrimitive.Root {...props} />
+      <SelectPrimitive.Root
+        {...props}
+        onValueChange={onValueChange as React.ComponentProps<typeof SelectPrimitive.Root>['onValueChange']}
+      />
     </SelectLabelRegistryContext.Provider>
   )
 }

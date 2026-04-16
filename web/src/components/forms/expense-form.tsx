@@ -621,6 +621,7 @@ export function ExpenseForm({ entry, activeDebts: activeDebtsProp, onSuccess, on
                   : ""
               }
               onValueChange={(val) => {
+                if (!val) return;
                 if (val.startsWith("bnpl:")) {
                   setValue("source_bnpl_purchase_id", val.slice(5), { shouldValidate: true });
                   setValue("linked_debt_id", null, { shouldValidate: true });
