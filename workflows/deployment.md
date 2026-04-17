@@ -12,8 +12,75 @@ Deploy KomalFin to a self-hosted VPS with a custom domain, using Supabase Cloud 
 | Database | Supabase Cloud | — |
 | Mobile | APK via EAS Build | sideloaded on Android |
 
-**VPS:** `root@194.164.151.189` (Ubuntu)
+**VPS:** `root@194.164.151.189` (Ubuntu, CloudPanel — password auth, no SSH key)
 **Repo:** `https://github.com/frenzyivy/finance-management-webapp-and-app`
+**PM2 process:** `komalfin-web`
+**VPS app path:** `/home/allianzaai-finance/htdocs/finance.allianzaai.com`
+
+---
+
+## Quick Deploy (everyday update) — Web + Android
+
+Use this once the VPS and EAS are already set up. Both apps in ~10 minutes.
+
+### Step 1 — Local: commit & push
+```bash
+cd "/c/Users/Komal/Documents/YT Apps/FInance Apps"
+# sanity check (TypeScript must pass before pushing)
+cd web && npx tsc --noEmit && cd ..
+git status
+git add <files>   # or git add -A after reviewing
+git commit -m "your message
+
+Co-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>"
+git push origin master
+```
+
+If `tsc --noEmit` fails, fix locally first. The VPS `npm run build` will fail on the same errors.
+
+### Step 2 — VPS: SSH in and redeploy
+Open PowerShell locally and paste the password when prompted:
+```bash
+ssh root@194.164.151.189
+```
+
+Then on the VPS, one command does everything:
+```bash
+cd /home/allianzaai-finance/htdocs/finance.allianzaai.com && \
+  git pull origin master && \
+  cd web && \
+  npm install && \
+  npm run build && \
+  pm2 restart komalfin-web
+```
+
+Check logs if the restart looks off:
+```bash
+pm2 logs komalfin-web --lines 50
+```
+
+Verify live: https://finance.allianzaai.com
+
+### Step 3 — Android APK: EAS build
+```bash
+cd "/c/Users/Komal/Documents/YT Apps/FInance Apps/mobile"
+npx eas build --platform android --profile preview --non-interactive
+```
+
+Build takes ~8 min on EAS servers. Output gives you a link like:
+`https://expo.dev/accounts/komalvsingh/projects/komalfin/builds/<id>`
+
+Open on Android phone → install APK.
+
+### Gotchas (learned the hard way)
+- **Dubious ownership** error on VPS git: run once, then retry:
+  ```bash
+  git config --global --add safe.directory /home/allianzaai-finance/htdocs/finance.allianzaai.com
+  ```
+- **First-time clone into existing dir:** if `.well-known/` already exists (SSL verification), clone into `temp-repo/` then `cp -r` contents over. Do NOT delete `.well-known/`.
+- **Build fails with TypeScript errors:** always run `npx tsc --noEmit` in `web/` before pushing. The VPS has no editor fallback.
+- **base-ui Select onValueChange** is typed `unknown | null` — the wrapper in `web/src/components/ui/select.tsx` re-types it as `string | null`. Callers must guard `if (!val) return;`.
+- **EAS preview profile** produces an APK (sideload-ready). `production` profile is for Play Store.
 
 ---
 
